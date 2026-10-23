@@ -4,201 +4,345 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hopper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Semi+Condensed:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
+  /* Tokens — SF palette: fog, bay ink, and the bridge's International Orange.
+     Mode colors are data, never decoration. */
   :root {
-    --bg: #f6f7f4; --panel: #ffffff; --ink: #14181f; --muted: #5d6573; --line: #e3e6e1;
-    --accent: #16a34a; --accent-ink: #ffffff; --chip: #eef6f0; --warn: #b45309;
+    --fog: #e9eef0; --paper: #f8fafb; --ink: #18324a; --ink-2: #4f6577; --ink-3: #7a8d9b;
+    --rule: #cfd8de; --rule-2: #e2e8ec;
+    --orange: #e5482a; --orange-ink: #ffffff; --orange-wash: #fbe5de;
+    --focus: #1d5c8c; --warn: #9a3412; --ok: #15803d;
+    --m-walk: #16a34a; --m-ride: #18324a; --m-muni: #dc2626; --m-bart: #2563eb;
+    --m-cable: #a16207; --m-bike: #7c3aed; --m-ebike: #c026d3;
+    --display: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+    --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f1311; --panel: #171c19; --ink: #e9ede9; --muted: #9aa49c; --line: #2a322d;
-            --accent: #22c55e; --accent-ink: #0b1a10; --chip: #1d2a22; --warn: #f59e0b; }
+    :root:not([data-theme="light"]) {
+      --fog: #0e1923; --paper: #13212e; --ink: #e5edf2; --ink-2: #9db0be; --ink-3: #72879a;
+      --rule: #2a3c4c; --rule-2: #1d2d3b;
+      --orange: #ff6b47; --orange-ink: #1b0b06; --orange-wash: #3a1c14;
+      --focus: #7cb7e6; --warn: #fdba74; --ok: #4ade80; --m-ride: #c8d4dc;
+    }
   }
+  :root[data-theme="dark"] {
+    --fog: #0e1923; --paper: #13212e; --ink: #e5edf2; --ink-2: #9db0be; --ink-3: #72879a;
+    --rule: #2a3c4c; --rule-2: #1d2d3b;
+    --orange: #ff6b47; --orange-ink: #1b0b06; --orange-wash: #3a1c14;
+    --focus: #7cb7e6; --warn: #fdba74; --ok: #4ade80; --m-ride: #c8d4dc;
+  }
+
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: var(--bg); color: var(--ink); }
-  .app { display: grid; grid-template-columns: 440px 1fr; height: 100vh; }
-  aside { overflow-y: auto; padding: 18px 18px 40px; border-right: 1px solid var(--line);
-          background: var(--panel); }
-  #map { height: 100%; }
-  h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
-  h1 span { color: var(--accent); }
-  .tag { color: var(--muted); margin: 2px 0 14px; }
-  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
-  input, select, button { font: inherit; color: inherit; }
-  input[type=text], select, input[type=number] {
-    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px;
-    background: var(--bg); }
-  .row { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; margin-top: 8px; }
-  .row3 { grid-template-columns: 1fr 1fr 1fr; }
-  .or { text-align: center; color: var(--muted); font-size: 12px; margin: 8px 0 0; }
-  .toggles { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
-  .toggles label { display: flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; margin: 0; }
-  .go { width: 100%; margin-top: 12px; padding: 11px; border: 0; border-radius: 12px;
-        background: var(--accent); color: var(--accent-ink); font-weight: 650; cursor: pointer; }
-  .go:disabled { opacity: .6; cursor: wait; }
-  .sliders { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
-  .sliders h3, details summary { font-size: 13px; margin: 0 0 6px; font-weight: 650; }
-  .slider { display: grid; grid-template-columns: 70px 1fr 28px; align-items: center; gap: 8px; }
-  .slider input { width: 100%; accent-color: var(--accent); }
-  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0 14px; }
-  .mode { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 10px 4px;
-          border: 1px solid var(--line); border-radius: 14px; background: var(--bg); cursor: pointer;
-          text-align: center; min-height: 78px; }
-  .mode .ico { font-size: 22px; line-height: 1.1; }
-  .mode b { font-size: 13px; }
-  .mode small { font-size: 10.5px; color: var(--muted); line-height: 1.2; }
-  .mode.active { border-color: var(--accent); background: var(--chip); box-shadow: 0 0 0 1px var(--accent); }
-  .mode.active b { color: var(--accent); }
+  body { margin: 0; font: 400 16px/1.5 var(--body); background: var(--fog); color: var(--ink);
+         -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+  .num-tab { font-variant-numeric: tabular-nums; }
+
+  .app { display: grid; grid-template-columns: 468px 1fr; height: 100vh; }
+  aside { overflow-y: auto; background: var(--paper); border-right: 1px solid var(--rule);
+          padding: 22px 24px 48px; }
+  #map { height: 100%; background: var(--fog); }
+
+  /* Header — the wordmark sits beside a tiny line diagram: walk, then ride. */
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand svg { flex: none; }
+  h1 { font: 800 36px/1 var(--display); letter-spacing: -0.01em; margin: 0; }
+  .tag { margin: 6px 0 20px; color: var(--ink-2); font-size: 15px; max-width: 34ch; }
+
+  /* Mode selector — one connected route-sign strip, not four tiles. */
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); border: 1.5px solid var(--ink);
+           border-radius: 10px; overflow: hidden; }
+  .mode { appearance: none; border: 0; border-left: 1.5px solid var(--ink); background: transparent;
+          padding: 10px 6px 9px; cursor: pointer; display: grid; justify-items: center; gap: 2px;
+          text-align: center; transition: background-color .15s, color .15s; }
+  .mode:first-child { border-left: 0; }
+  .mode svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8;
+              stroke-linecap: round; stroke-linejoin: round; }
+  .mode b { font: 700 16px/1.1 var(--display); }
+  .mode small { font-size: 12px; line-height: 1.2; color: var(--ink-2); }
+  .mode:hover { background: var(--rule-2); }
+  .mode.active { background: var(--orange); color: var(--orange-ink); }
+  .mode.active small { color: inherit; opacity: .85; }
+
+  /* Forms */
+  .field-label { display: block; font-size: 13px; font-weight: 500; color: var(--ink-2); margin: 0 0 4px; }
+  input[type=text], input[type=number], select {
+    width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 8px;
+    background: var(--fog); }
+  select { appearance: none; padding-right: 30px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%), linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+    background-position: right 15px center, right 10px center; background-size: 5px 5px; background-repeat: no-repeat; }
+  input::placeholder { color: var(--ink-3); }
+  .ask { margin-top: 20px; }
+  .ask input { height: 48px; font-size: 16px; background: var(--paper); border: 1.5px solid var(--ink); }
+  .or { color: var(--ink-3); font-size: 13px; margin: 14px 0 8px; }
+  /* From → To drawn as a two-stop line, the way a transit map would. */
+  .stops-pick { display: grid; grid-template-columns: 18px 1fr; column-gap: 10px; row-gap: 8px; align-items: center; }
+  .stops-pick .rail { grid-row: 1 / span 2; align-self: stretch; position: relative; }
+  .stops-pick .rail::before { content: ""; position: absolute; left: 8px; top: 21px; bottom: 21px;
+                              border-left: 2px dotted var(--ink-3); }
+  .stops-pick .rail i { position: absolute; left: 3px; width: 12px; height: 12px; border-radius: 50%; }
+  .stops-pick .rail i:first-child { top: 15px; background: var(--ink); }
+  .stops-pick .rail i:last-child { bottom: 15px; border: 3px solid var(--orange); background: var(--paper); }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .toggles { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+  .toggle input { appearance: none; width: 32px; height: 18px; border-radius: 9px; margin: 0;
+                  background: var(--rule); position: relative; cursor: pointer; transition: background .15s; }
+  .toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+                         border-radius: 50%; background: var(--paper); transition: transform .15s; }
+  .toggle input:checked { background: var(--ink); }
+  .toggle input:checked::after { transform: translateX(14px); }
+  .go { width: 100%; height: 48px; margin-top: 16px; border: 0; border-radius: 8px; cursor: pointer;
+        background: var(--orange); color: var(--orange-ink); font: 700 18px/1 var(--display); letter-spacing: .01em; }
+  .go:hover { filter: brightness(1.05); }
+  .go:disabled { opacity: .65; cursor: progress; }
   .vibes { display: flex; gap: 6px; flex-wrap: wrap; }
-  .vibes button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
-                  padding: 4px 10px; font-size: 12px; cursor: pointer; }
-  .vibes button.on { border-color: var(--accent); color: var(--accent); background: var(--chip); }
-  .notice { margin-top: 12px; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--warn);
-            color: var(--warn); font-size: 13px; }
-  .stop { display: grid; grid-template-columns: 26px 1fr; gap: 8px; margin-top: 10px; }
-  .stop .num { width: 24px; height: 24px; border-radius: 50%; background: #c026d3; color: #fff;
-               display: grid; place-items: center; font-size: 12px; font-weight: 700; }
-  .stop .t { font-size: 12px; color: var(--muted); }
-  .hop { margin: 4px 0 0 34px; font-size: 12px; color: var(--muted); }
-  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-  .presets button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
-                    padding: 3px 10px; font-size: 12px; cursor: pointer; }
-  details { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-  details summary { cursor: pointer; margin: 0; }
-  .error { margin-top: 12px; color: var(--warn); font-weight: 550; }
-  .wx { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: var(--chip); font-size: 14px; }
-  .wx b { font-size: 16px; }
-  .sources { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .sources span { font-size: 11px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); }
-  .sources .on { border-color: var(--accent); color: var(--accent); }
-  .sources .off { color: var(--muted); }
-  .meta { color: var(--muted); font-size: 12px; margin-top: 14px; }
-  .card { margin-top: 10px; border: 1px solid var(--line); border-radius: 14px; padding: 12px;
-          cursor: pointer; background: var(--panel); transition: border-color .15s; }
-  .card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-  .card .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .label { font-size: 12px; font-weight: 650; background: var(--chip); color: var(--accent);
-           padding: 2px 8px; border-radius: 999px; }
-  .cost { font-weight: 700; font-size: 18px; }
-  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 8px 0; }
-  .metrics div { font-size: 11px; color: var(--muted); }
-  .metrics b { display: block; font-size: 15px; color: var(--ink); }
-  .strip { display: flex; height: 10px; border-radius: 6px; overflow: hidden; gap: 2px; }
-  .legs { margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; }
-  .legs li { display: flex; gap: 8px; padding: 2px 0; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex: none; }
-  .why { margin-top: 8px; font-size: 13px; color: var(--muted); font-style: italic; }
-  .flags { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
-  .flags span { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
-  .book { margin-top: 10px; border: 1px solid var(--accent); color: var(--accent); background: transparent;
-          border-radius: 10px; padding: 6px 12px; cursor: pointer; font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
-  td, th { text-align: left; padding: 4px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 10px; }
-  .legend span { display: flex; align-items: center; gap: 4px; }
-  .modal { position: fixed; inset: 0; background: rgb(0 0 0 / .45); display: none;
+  .vibes button { border: 1px solid var(--rule); background: var(--fog); border-radius: 999px;
+                  padding: 5px 12px; font-size: 14px; cursor: pointer; }
+  .vibes button.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .fine { font-size: 13px; color: var(--ink-3); margin-top: 10px; }
+  .error { margin-top: 12px; color: var(--warn); font-weight: 500; }
+  .notice { margin-top: 14px; padding: 10px 12px; border-left: 3px solid var(--orange);
+            background: var(--orange-wash); font-size: 14px; border-radius: 0 6px 6px 0; }
+
+  details { margin-top: 18px; border-top: 1px solid var(--rule-2); padding-top: 10px; }
+  summary { cursor: pointer; font-weight: 500; color: var(--ink-2); font-size: 14px; list-style: none;
+            display: flex; align-items: center; gap: 8px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor;
+                    border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
+  details[open] > summary::before { transform: rotate(45deg); }
+  .sliders { display: grid; gap: 6px; margin: 10px 0 12px; }
+  .slider { display: grid; grid-template-columns: 64px 1fr 28px; align-items: center; gap: 10px; font-size: 14px; }
+  .slider input { width: 100%; accent-color: var(--orange); }
+  .slider b { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Results */
+  .results-head { margin-top: 26px; padding-top: 18px; border-top: 2px solid var(--ink); }
+  .results-head h2 { font: 700 24px/1.15 var(--display); margin: 0; }
+  .results-head p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
+  .conditions { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+  .conditions .wx { color: var(--ink); font-weight: 500; }
+  .src { display: inline-flex; align-items: center; gap: 6px; }
+  .src::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+  .src.on::before { background: var(--ok); }
+
+  .opt { position: relative; padding: 16px 0 16px 16px; border-bottom: 1px solid var(--rule-2); cursor: pointer; }
+  .opt::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 3px;
+                 border-radius: 2px; background: transparent; }
+  .opt.active::before { background: var(--orange); }
+  .opt:hover:not(.active)::before { background: var(--rule); }
+  .opt .label { font-weight: 600; font-size: 14px; color: var(--ink-2); }
+  .opt.active .label { color: var(--orange); }
+  .headline { display: flex; align-items: baseline; gap: 18px; margin-top: 2px; }
+  .headline .big { font: 800 34px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .headline .big small { font: 700 18px var(--display); margin-left: 2px; }
+  .headline .side { margin-left: auto; text-align: right; font-size: 13px; color: var(--ink-2); line-height: 1.35; }
+  .headline .side b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* The line diagram: each leg a segment sized to its minutes, stop dots at handoffs. */
+  .line { display: flex; margin: 18px 4px 6px 6px; }
+  .seg { position: relative; min-width: 34px; padding-top: 18px; }
+  .seg .bar { height: 6px; background: var(--c); border-radius: 3px; transform-origin: left center; }
+  .seg.walk .bar { background: radial-gradient(circle, var(--c) 2.2px, transparent 2.6px) 0 50% / 9px 6px repeat-x; }
+  .seg .tag2 { position: absolute; top: 0; left: 10px; right: 4px; font-size: 12px; font-weight: 600;
+               color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg::before, .line .end { content: ""; position: absolute; z-index: 1; top: 14px; left: -6px;
+               width: 14px; height: 14px; border-radius: 50%; background: var(--paper); border: 3px solid var(--ink); }
+  .seg:first-child::before { background: var(--ink); }
+  .line .end-wrap { position: relative; width: 0; }
+  .line .end { left: -8px; border-color: var(--orange); }
+  /* "backwards" (not "both"): once drawn, the bar falls back to its plain static style. */
+  .draw .seg .bar { animation: draw .5s cubic-bezier(.3,.7,.2,1) backwards; }
+  .draw .seg:nth-child(2) .bar { animation-delay: .12s; }
+  .draw .seg:nth-child(3) .bar { animation-delay: .24s; }
+  .draw .seg:nth-child(4) .bar { animation-delay: .36s; }
+  @keyframes draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @media (prefers-reduced-motion: reduce) { .draw .seg .bar { animation: none; } }
+
+  .legs { list-style: none; margin: 10px 0 0; padding: 0; font-size: 14px; }
+  .legs li { display: grid; grid-template-columns: 72px 1fr; gap: 8px; padding: 3px 0; }
+  .legs .m { font-weight: 600; color: var(--c); }
+  .legs .d { color: var(--ink); }
+  .legs .x { color: var(--ink-2); font-size: 13px; }
+  .why { margin-top: 10px; font-size: 15px; color: var(--ink-2); max-width: 60ch; }
+  .flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .flags span { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--fog); color: var(--ink-2); }
+  .book { margin-top: 12px; height: 36px; padding: 0 14px; border-radius: 8px; cursor: pointer;
+          border: 1.5px solid var(--ink); background: transparent; font-weight: 600; }
+  .opt:not(.active) .book { display: none; }
+
+  /* Bar Crawl itinerary — a real sequence, so numbered stops on a vertical line. */
+  .crawl { margin-top: 6px; }
+  .crawl .stop { position: relative; display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 10px 0; }
+  .crawl .stop::before { content: ""; position: absolute; left: 13px; top: 0; bottom: 0; border-left: 2px solid var(--orange); }
+  .crawl .stop:first-child::before { top: 22px; }
+  .crawl .stop.last::before { bottom: calc(100% - 22px); }
+  .crawl .numdot { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%;
+                   background: var(--orange); color: var(--orange-ink); display: grid; place-items: center;
+                   font: 700 15px/1 var(--display); }
+  .crawl .numdot.walk { width: 14px; height: 14px; margin: 6px 7px; background: var(--paper);
+                        border: 2px solid var(--m-walk); }
+  .crawl .numdot.ride { width: 14px; height: 14px; margin: 6px 7px; background: var(--ink); }
+  .crawl h3 { font: 700 19px/1.2 var(--display); margin: 0; }
+  .crawl .t { font-size: 14px; color: var(--ink-2); }
+  .crawl .hopline { font-size: 14px; color: var(--ink-2); padding-top: 3px; }
+  .crawl a { color: var(--focus); }
+  .pin { width: 26px; height: 26px; border-radius: 50%; background: var(--orange); color: #fff;
+         display: grid; place-items: center; font: 700 14px/1 var(--display); border: 2px solid #fff;
+         box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  td, th { text-align: left; padding: 5px 4px; border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+  th { color: var(--ink-2); font-weight: 600; }
+  #rejected ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-2); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin-top: 22px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 18px; height: 4px; border-radius: 2px; background: var(--c); }
+  .legend i.walk { background: radial-gradient(circle, var(--c) 1.8px, transparent 2.2px) 0 50% / 6px 4px repeat-x; }
+
+  .modal { position: fixed; inset: 0; background: rgb(14 25 35 / .55); display: none;
            align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
   .modal.open { display: flex; }
-  .modal > div { background: var(--panel); border-radius: 16px; padding: 20px; max-width: 380px; width: 100%; }
-  @media (max-width: 820px) {
-    .app { grid-template-columns: 1fr; grid-template-rows: auto 45vh; height: auto; }
-    aside { border-right: 0; padding: 16px; order: 1; }
-    #map { order: 0; height: 45vh; position: sticky; top: 0; z-index: 1; }
+  .modal > div { background: var(--paper); border-radius: 12px; padding: 22px; max-width: 380px; width: 100%; }
+  .modal h3 { font: 700 24px/1.1 var(--display); margin: 0 0 8px; }
+
+  .leaflet-container { font-family: var(--body); }
+  .leaflet-tooltip { font: 500 13px/1.3 var(--body); border-radius: 6px; padding: 4px 8px; }
+
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto auto; height: auto; }
+    /* Above every positioned element in the panel (stop dots, line diagram) while scrolling. */
+    #map { order: 0; height: 42vh; position: sticky; top: 0; z-index: 10; }
+    aside { order: 1; border-right: 0; padding: 18px 16px 40px; }
+    h1 { font-size: 32px; }
+    .mode small { font-size: 11px; }
+    .headline .big { font-size: 30px; }
   }
+  @media (max-width: 380px) { .mode small { display: none; } }
 </style>
 </head>
 <body>
 <div class="app">
   <aside>
-    <h1>Hop<span>per</span></h1>
-    <div class="tag">Walk a bit. Ride a bit. Save money and get your steps in. San Francisco only.</div>
+    <div class="brand">
+      <svg width="44" height="16" viewBox="0 0 44 16" aria-hidden="true">
+        <line x1="8" y1="8" x2="22" y2="8" stroke="var(--m-walk)" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 5"/>
+        <line x1="22" y1="8" x2="36" y2="8" stroke="var(--orange)" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="6" cy="8" r="4.5" fill="var(--ink)"/>
+        <circle cx="22" cy="8" r="3.5" fill="var(--paper)" stroke="var(--ink)" stroke-width="2"/>
+        <circle cx="38" cy="8" r="4" fill="var(--paper)" stroke="var(--orange)" stroke-width="3"/>
+      </svg>
+      <h1>Hopper</h1>
+    </div>
+    <p class="tag">Walk a bit, ride a bit, and get there your way. San Francisco only.</p>
 
-    <div class="modes" id="modes" role="radiogroup" aria-label="Mode">
-      <button class="mode active" data-mode="hustle" role="radio" aria-checked="true"><span class="ico">⚡</span><b>Hustle</b><small>Fastest</small></button>
-      <button class="mode" data-mode="broke" role="radio" aria-checked="false"><span class="ico">💸</span><b>Broke</b><small>Budget</small></button>
-      <button class="mode" data-mode="barcrawl" role="radio" aria-checked="false"><span class="ico">🍸</span><b>Bar Crawl</b><small>Hit cool bars</small></button>
-      <button class="mode" data-mode="burn" role="radio" aria-checked="false"><span class="ico">🔥</span><b>Burn</b><small>Part transit / part workout</small></button>
+    <div class="modes" id="modes" role="radiogroup" aria-label="How do you want to get there?">
+      <button class="mode active" data-mode="hustle" role="radio" aria-checked="true" title="Fastest">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>
+        <b>Hustle</b><small>Fastest</small></button>
+      <button class="mode" data-mode="broke" role="radio" aria-checked="false" title="Budget">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2c-.4-.9-1.5-1.5-2.8-1.5-1.6 0-2.8.8-2.8 2s1.1 1.7 2.8 2.1 2.8.9 2.8 2.2-1.2 2.1-2.8 2.1c-1.4 0-2.5-.6-2.9-1.6M12 6v1.7M12 16.1V18"/></svg>
+        <b>Broke</b><small>Budget</small></button>
+      <button class="mode" data-mode="barcrawl" role="radio" aria-checked="false" title="Hit cool bars">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16l-8 9.5zM12 13.5V20M8 20h8M15 4l2.5-2"/></svg>
+        <b>Bar Crawl</b><small>Cool bars</small></button>
+      <button class="mode" data-mode="burn" role="radio" aria-checked="false" title="Part transit, part workout">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.6 3 4.5 5 4.5 10a4.5 4.5 0 0 1-9 0c0-2.4 1.2-3.8 2.3-4.8.1 2 .9 3.1 2.2 3.4-.4-3.2-.6-5.8 0-8.6z"/></svg>
+        <b>Burn</b><small>Transit + workout</small></button>
     </div>
 
     <div id="trip-form">
-      <label for="q">Ask in plain English</label>
-      <input id="q" type="text" placeholder="e.g. late for a meeting, Castro to Salesforce Tower">
-      <div class="or">— or pick —</div>
-      <div class="row">
-        <div><label for="from">From</label><select id="from"></select></div>
-        <div><label for="to">To</label><select id="to"></select></div>
+      <div class="ask">
+        <label class="field-label" for="q">Where to?</label>
+        <input id="q" type="text" autocomplete="off" placeholder="Late for a meeting, Castro to Salesforce Tower">
       </div>
-      <div class="row row3">
-        <div><label for="hour">Leave at</label><select id="hour"></select></div>
-        <div><label for="weather">Weather</label>
-          <select id="weather"><option value="live">Live (NWS)</option><option value="clear">Clear</option><option value="fog">Fog</option><option value="rain">Rain</option></select></div>
-        <div><label for="budget">Budget $</label><input id="budget" type="number" min="0" placeholder="any"></div>
+      <div class="or">or pick two stops</div>
+      <div class="stops-pick">
+        <div class="rail" aria-hidden="true"><i></i><i></i></div>
+        <div><label class="field-label" for="from">From</label><select id="from"></select></div>
+        <div><label class="field-label" for="to">To</label><select id="to"></select></div>
+      </div>
+      <div class="grid3">
+        <div><label class="field-label" for="hour">Leave at</label><select id="hour"></select></div>
+        <div><label class="field-label" for="weather">Weather</label>
+          <select id="weather"><option value="live">Live forecast</option><option value="clear">Clear</option><option value="fog">Fog</option><option value="rain">Rain</option></select></div>
+        <div><label class="field-label" for="budget">Budget ($)</label><input id="budget" type="number" min="0" placeholder="Any"></div>
       </div>
       <div class="toggles">
-        <label><input id="event" type="checkbox"> Game / event day</label>
-        <label><input id="steep" type="checkbox"> Avoid steep hills</label>
+        <label class="toggle"><input id="event" type="checkbox"> Game night</label>
+        <label class="toggle"><input id="steep" type="checkbox"> Avoid steep hills</label>
       </div>
       <button id="go" class="go">Plan my trip</button>
     </div>
 
     <div id="crawl-form" style="display:none">
-      <div class="row">
-        <div><label for="c-start">Start near</label><select id="c-start"></select></div>
-        <div><label for="c-end">Home (ride back)</label><select id="c-end"></select></div>
+      <div class="stops-pick" style="margin-top:20px">
+        <div class="rail" aria-hidden="true"><i></i><i></i></div>
+        <div><label class="field-label" for="c-start">Start near</label><select id="c-start"></select></div>
+        <div><label class="field-label" for="c-end">Ride home to</label><select id="c-end"></select></div>
       </div>
-      <div class="row row3">
-        <div><label for="c-hour">Start at</label><select id="c-hour"></select></div>
-        <div><label for="c-stops">Stops</label><select id="c-stops"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></div>
-        <div><label for="c-mins">Min / stop</label><select id="c-mins"><option>30</option><option selected>45</option><option>60</option><option>90</option></select></div>
+      <div class="grid3">
+        <div><label class="field-label" for="c-hour">Start at</label><select id="c-hour"></select></div>
+        <div><label class="field-label" for="c-stops">Bars</label><select id="c-stops"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></div>
+        <div><label class="field-label" for="c-mins">Minutes at each</label><select id="c-mins"><option>30</option><option selected>45</option><option>60</option><option>90</option></select></div>
       </div>
-      <label style="margin-top:10px">Vibe</label>
+      <span class="field-label" style="margin-top:14px">Vibe</span>
       <div class="vibes" id="vibes"></div>
       <div class="toggles">
-        <label><input id="c-age" type="checkbox"> I'm 21 or older</label>
+        <label class="toggle"><input id="c-age" type="checkbox"> I'm 21 or older</label>
       </div>
       <button id="c-go" class="go">Plan my crawl</button>
-      <div class="meta">Bars from OpenStreetMap. OSM has no ratings — the cool score uses landmark status, how well a bar is mapped, website/hours, and your vibe. Drink responsibly. Never drive.</div>
+      <p class="fine">Bars come from OpenStreetMap, which has no ratings. Picks favor SF landmarks, well-documented bars, and your vibe. Drink responsibly, and never drive.</p>
     </div>
-    <div id="error" class="error"></div>
+    <div id="error" class="error" role="alert"></div>
 
     <details id="advanced">
-      <summary>Advanced: custom weights &amp; profile</summary>
+      <summary>Fine-tune weights and your profile</summary>
       <div class="sliders">
-        <div class="slider"><span>⏱ Time</span><input id="w-time" type="range" min="0" max="3" step="0.5" value="3"><b id="v-time">3</b></div>
-        <div class="slider"><span>💵 Cost</span><input id="w-cost" type="range" min="0" max="3" step="0.5" value="0.5"><b id="v-cost">0.5</b></div>
-        <div class="slider"><span>💚 Health</span><input id="w-health" type="range" min="0" max="3" step="0.5" value="0"><b id="v-health">0</b></div>
-        <div class="meta" style="margin-top:4px">Moving a slider switches to Custom mode.</div>
+        <div class="slider"><span>Time</span><input id="w-time" type="range" min="0" max="3" step="0.5" value="3" aria-label="Time weight"><b id="v-time">3</b></div>
+        <div class="slider"><span>Cost</span><input id="w-cost" type="range" min="0" max="3" step="0.5" value="0.5" aria-label="Cost weight"><b id="v-cost">0.5</b></div>
+        <div class="slider"><span>Health</span><input id="w-health" type="range" min="0" max="3" step="0.5" value="0" aria-label="Health weight"><b id="v-health">0</b></div>
       </div>
-      <div class="row row3">
-        <div><label for="kg">Weight (kg)</label><input id="kg" type="number" value="75" min="30" max="200"></div>
-        <div><label for="leg">Max walk / leg (mi)</label><input id="leg" type="number" value="2.0" step="0.1" min="0.1"></div>
-        <div><label for="total">Max walk total (mi)</label><input id="total" type="number" value="3.0" step="0.1" min="0.1"></div>
+      <div class="grid3" style="margin-top:0">
+        <div><label class="field-label" for="kg">Weight (kg)</label><input id="kg" type="number" value="75" min="30" max="200"></div>
+        <div><label class="field-label" for="leg">Longest walk (mi)</label><input id="leg" type="number" value="2.0" step="0.1" min="0.1"></div>
+        <div><label class="field-label" for="total">Total walking (mi)</label><input id="total" type="number" value="3.0" step="0.1" min="0.1"></div>
       </div>
+      <p class="fine">Moving a slider leaves the Mode and uses your own weights.</p>
     </details>
-    <div id="notice" class="notice" style="display:none"></div>
+    <div id="notice" class="notice" style="display:none" role="status"></div>
 
-    <div id="wx" class="wx" style="display:none"></div>
-    <div id="sources" class="sources"></div>
-    <div id="meta" class="meta"></div>
+    <div id="results-head" class="results-head" style="display:none">
+      <h2 id="meta"></h2>
+      <p id="meta-sub"></p>
+      <div class="conditions"><span id="wx" class="wx"></span><span id="sources" style="display:contents"></span></div>
+    </div>
     <div id="results"></div>
 
     <details id="trace-box" style="display:none">
-      <summary>Agent swarm trace</summary>
+      <summary>How the agents planned this</summary>
       <div id="trace"></div>
     </details>
     <details id="rej-box" style="display:none">
-      <summary>Rejected by the Critic</summary>
+      <summary>Trips the checker ruled out</summary>
       <div id="rejected"></div>
     </details>
     <div class="legend" id="legend"></div>
-    <div class="meta">Ride prices are <b>simulated estimates</b>, not real Uber/Lyft quotes. Transit and bike fares are approximate. Calories are estimates. Booking is a mock.</div>
+    <p class="fine">Ride prices are simulated estimates, not Uber or Lyft quotes. Transit and bike fares are approximate, calories are estimates, and booking is a demo.</p>
   </aside>
-  <div id="map"></div>
+  <div id="map" aria-label="Trip map"></div>
 </div>
 
-<div class="modal" id="modal"><div id="modal-body"></div></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div id="modal-body"></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -208,34 +352,34 @@ const MODE_NAMES = { walk: "Walk", ride: "Ride", muni: "Muni", bart: "BART", cab
 let COLORS = {}, PLACES = [], plan = null, options = [], active = 0, layer = null, rerankTimer = null;
 let mode = "hustle", vibe = "any";
 const MODE_WEIGHTS = { hustle: [3, 0.5, 0], broke: [0.5, 3, 0.5], burn: [0.5, 0.5, 3] };
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const cvar = (m) => `var(--m-${m})`;
 
 const map = L.map("map", { zoomControl: true }).setView([37.773, -122.431], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19, attribution: "&copy; OpenStreetMap contributors · routes: OSRM / FOSSGIS" }).addTo(map);
+  maxZoom: 19, attribution: "&copy; OpenStreetMap contributors, routes by OSRM / FOSSGIS" }).addTo(map);
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function hourLabel(h) { return h === 0 ? "12 am" : h < 12 ? `${h} am` : h === 12 ? "12 pm" : `${h - 12} pm`; }
 function weights() { return { time: +$("w-time").value, cost: +$("w-cost").value, health: +$("w-health").value }; }
+function mins(m) { m = Math.round(m); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`; }
 
 async function init() {
   const r = await fetch("api/places").then(r => r.json());
   PLACES = r.places; COLORS = r.colors;
-  for (const sel of [$("from"), $("to")]) {
-    sel.innerHTML = PLACES.map(p => `<option value="${p.key}">${esc(p.name)}</option>`).join("");
-  }
+  const opts = PLACES.map(p => `<option value="${p.key}">${esc(p.name)}</option>`).join("");
+  $("from").innerHTML = opts; $("to").innerHTML = opts;
   $("from").value = "ferry_building"; $("to").value = "coit_tower";
   $("hour").innerHTML = [...Array(24).keys()].map(h => `<option value="${h}">${hourLabel(h)}</option>`).join("");
   // Default to "now" in San Francisco, whatever the viewer's own time zone is.
   $("hour").value = +new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", hourCycle: "h23" }).format(new Date());
-  $("legend").innerHTML = Object.entries(COLORS).map(([m, c]) =>
-    `<span><i class="dot" style="background:${c};margin:0"></i>${MODE_NAMES[m]}</span>`).join("");
-  // Bar Crawl form
-  const opts = PLACES.map(p => `<option value="${p.key}">${esc(p.name)}</option>`).join("");
+  $("legend").innerHTML = Object.keys(COLORS).map(m =>
+    `<span><i class="${m === "walk" ? "walk" : ""}" style="--c:${cvar(m)}"></i>${MODE_NAMES[m]}</span>`).join("");
   $("c-start").innerHTML = opts; $("c-start").value = "washington_sq";
-  $("c-end").innerHTML = `<option value="">— no ride home —</option>` + opts; $("c-end").value = "hayes_valley";
+  $("c-end").innerHTML = `<option value="">No ride home</option>` + opts; $("c-end").value = "hayes_valley";
   $("c-hour").innerHTML = $("hour").innerHTML; $("c-hour").value = 20;
   $("vibes").innerHTML = Object.entries(r.vibes).map(([k, label]) =>
-    `<button data-vibe="${k}" class="${k === vibe ? "on" : ""}">${esc(label)}</button>`).join("");
+    `<button type="button" data-vibe="${k}" aria-pressed="${k === vibe}" class="${k === vibe ? "on" : ""}">${esc(label)}</button>`).join("");
 }
 
 function setMode(m, { rerank = true } = {}) {
@@ -258,8 +402,8 @@ function setMode(m, { rerank = true } = {}) {
 }
 
 function clearResults() {
-  for (const id of ["results", "meta", "sources"]) $(id).innerHTML = "";
-  for (const id of ["wx", "notice", "trace-box", "rej-box"]) $(id).style.display = "none";
+  for (const id of ["results", "meta", "meta-sub", "sources", "wx"]) $(id).innerHTML = "";
+  for (const id of ["results-head", "notice", "trace-box", "rej-box"]) $(id).style.display = "none";
   if (layer) { map.removeLayer(layer); layer = null; }
 }
 
@@ -269,7 +413,7 @@ function showNotice(text) {
 }
 
 async function planTrip() {
-  $("error").textContent = ""; $("go").disabled = true; $("go").textContent = "Asking the swarm…";
+  $("error").textContent = ""; $("go").disabled = true; $("go").textContent = "Planning…";
   const body = {
     query: $("q").value, origin: $("from").value, destination: $("to").value,
     hour: +$("hour").value, weather: $("weather").value, event: $("event").checked,
@@ -287,7 +431,7 @@ async function planTrip() {
       if (data.start) $("c-start").value = data.start;
       if (data.end) $("c-end").value = data.end;
       $("c-hour").value = data.hour;
-      showNotice("Sounds like a night out 🍸 — confirm you're 21+, pick a vibe, and plan your crawl.");
+      showNotice("Sounds like a night out. Confirm you're 21 or older, pick a vibe, and plan your crawl.");
       return;
     }
     plan = data; options = data.options; active = 0;
@@ -298,7 +442,7 @@ async function planTrip() {
     if (rq.max_cost != null) $("budget").value = rq.max_cost;
     if (rq.mode && rq.mode !== mode && MODE_WEIGHTS[rq.mode]) setMode(rq.mode, { rerank: false });
     showNotice(data.notice);
-    renderAll();
+    renderAll(true);
   } catch (e) {
     $("error").textContent = e.message;
   } finally {
@@ -312,13 +456,13 @@ async function rerankNow() {
     body: JSON.stringify({ plan_id: plan.plan_id, mode, weights: weights() }) });
   const data = await res.json();
   if (!res.ok) { $("error").textContent = data.error; return; }
-  options = data.options; active = 0; showNotice(data.notice); renderResults(); drawTrip();
+  options = data.options; active = 0; showNotice(data.notice); renderResults(true); drawTrip();
 }
 
 async function planCrawl() {
   $("error").textContent = "";
-  if (!$("c-age").checked) { $("error").textContent = "Bar Crawl is 21+. Please confirm your age."; return; }
-  $("c-go").disabled = true; $("c-go").textContent = "Scouting bars…";
+  if (!$("c-age").checked) { $("error").textContent = "Bar Crawl is for 21 and older. Confirm your age to continue."; return; }
+  $("c-go").disabled = true; $("c-go").textContent = "Finding bars…";
   const body = { start: $("c-start").value, end: $("c-end").value, hour: +$("c-hour").value,
     stops: +$("c-stops").value, minutes_per_stop: +$("c-mins").value, vibe,
     weather: $("weather").value, event: $("event").checked, weight_kg: +$("kg").value, age_confirmed: true };
@@ -334,100 +478,122 @@ async function planCrawl() {
   }
 }
 
+function weatherText(w, condition) {
+  if (!w) return condition === "clear" ? "Clear" : condition === "rain" ? "Rain" : "Fog";
+  return `${w.temp_f}°F, ${esc(w.summary.toLowerCase())}, wind ${w.wind_mph} mph`;
+}
+
 function renderCrawl(d) {
   clearResults(); showNotice("");
   const it = d.itinerary, tot = it.totals;
-  const w = d.weather;
-  $("wx").style.display = "block";
-  $("wx").innerHTML = w ? `${{ rain: "🌧", fog: "🌫" }[d.condition] || "☀️"} <b>${w.temp_f}°F</b> ${esc(w.summary)} · wind ${w.wind_mph} mph · rain ${w.precip_pct}%`
-    : `Weather: <b>${esc(d.condition)}</b>`;
-  $("sources").innerHTML = `<span class="on">Bars: ${esc(d.source)}</span><span class="on">${d.bars_considered} bars considered</span><span>hops ≤ ${d.hop_limit_mi} mi</span>`;
-  $("meta").innerHTML = `<b>🍸 ${it.stops.length}-stop crawl from ${esc(d.start_name)}</b> · ${tot.minutes} min · ends ${esc(tot.ends)} ·
-    ${tot.walk_mi} mi walked · ${tot.steps.toLocaleString()} steps${it.ride_home ? ` · ride home $${it.ride_home.cost.toFixed(2)}` : ""}`;
-  let html = `<div class="card active">`;
+  $("results-head").style.display = "block";
+  $("meta").textContent = `${it.stops.length} bars from ${d.start_name}`;
+  $("meta-sub").textContent = `${mins(tot.minutes)}, done by ${tot.ends}. ${tot.walk_mi} mi of walking between bars` +
+    (it.ride_home ? `, then a $${it.ride_home.cost.toFixed(2)} ride home.` : ".");
+  $("wx").innerHTML = weatherText(d.weather, d.condition);
+  $("sources").innerHTML = `<span class="src on">${esc(d.source)}</span><span class="src on">${d.bars_considered} bars considered</span>`;
+  const rows = [];
   it.stops.forEach((s, i) => {
     const hop = it.walks[i];
-    html += `<div class="hop">🚶 ${hop.distance_mi} mi · ${Math.round(hop.minutes)} min walk</div>
-      <div class="stop"><div class="num">${i + 1}</div><div>
-        <b>${esc(s.name)}</b> <span class="t">${esc(s.arrive)} – ${esc(s.leave)}</span>
+    rows.push(`<div class="stop"><span class="numdot walk" aria-hidden="true"></span>
+      <div class="hopline">Walk ${hop.distance_mi} mi, about ${Math.round(hop.minutes)} min</div></div>`);
+    const site = /^https?:\/\//i.test(s.website) ? ` <a href="${esc(s.website)}" target="_blank" rel="noopener noreferrer">Website</a>` : "";
+    rows.push(`<div class="stop"><span class="numdot">${i + 1}</span><div>
+        <h3>${esc(s.name)}</h3>
+        <div class="t">${esc(s.arrive)} to ${esc(s.leave)}</div>
         <div class="t">${esc(s.why)}</div>
-        <div class="t">🕑 ${esc(s.hours)}${/^https?:\/\//i.test(s.website) ? ` · <a href="${esc(s.website)}" target="_blank" rel="noopener noreferrer">website</a>` : ""}</div>
-      </div></div>`;
+        <div class="t">Hours: ${esc(s.hours)}.${site}</div>
+      </div></div>`);
   });
   if (it.ride_home) {
     const r = it.ride_home;
-    html += `<div class="hop">🚗 Ride home to <b>${esc(r.to_name)}</b> · ${r.distance_mi} mi · ${Math.round(r.minutes)} min + ${r.wait_min} wait · $${r.cost.toFixed(2)} <i>(simulated)</i></div>`;
-  }
+    rows.push(`<div class="stop last"><span class="numdot ride" aria-hidden="true"></span><div>
+      <h3>Ride home to ${esc(r.to_name)}</h3>
+      <div class="t">${r.distance_mi} mi, ${Math.round(r.minutes)} min plus ${r.wait_min} min pickup. $${r.cost.toFixed(2)}, simulated.</div></div></div>`);
+  } else rows[rows.length - 1] = rows[rows.length - 1].replace('class="stop"', 'class="stop last"');
+  let html = `<div class="crawl">${rows.join("")}</div>`;
   if (it.notes.length) html += `<div class="flags">${it.notes.map(n => `<span>${esc(n)}</span>`).join("")}</div>`;
-  if (d.alternate.length) html += `<div class="why">Alternate crawl: ${d.alternate.map(a => esc(a.name)).join(" → ")}</div>`;
-  html += `<div class="meta">Drink responsibly. Never drive — the ride home is part of the plan.</div></div>`;
+  if (d.alternate.length) html += `<p class="why">Another option: ${d.alternate.map(a => esc(a.name)).join(", then ")}.</p>`;
   $("results").innerHTML = html;
-  // Map: walking hops, numbered pins, ride home.
   map.invalidateSize();
   layer = L.featureGroup().addTo(map);
-  for (const h of it.walks) L.polyline(h.path, { color: COLORS.walk, weight: 4, dashArray: "2 8" }).addTo(layer);
-  if (it.ride_home) L.polyline(it.ride_home.path, { color: COLORS.ride, weight: 5, opacity: 0.8 }).bindTooltip("Ride home (simulated)").addTo(layer);
+  for (const h of it.walks) L.polyline(h.path, { color: COLORS.walk, weight: 5, dashArray: "1 9", lineCap: "round" }).addTo(layer);
+  if (it.ride_home) L.polyline(it.ride_home.path, { color: COLORS.ride, weight: 5, opacity: 0.85 }).bindTooltip("Ride home (simulated)").addTo(layer);
   it.stops.forEach((s, i) => L.marker([s.lat, s.lon], { icon: L.divIcon({ className: "",
-    html: `<div class="stop"><div class="num">${i + 1}</div></div>`, iconSize: [24, 24], iconAnchor: [12, 12] }) })
-    .bindTooltip(`${i + 1}. ${s.name} · ${s.arrive}`).addTo(layer));
-  const start = it.walks[0].path[0];
-  L.circleMarker(start, { radius: 8, color: "#fff", weight: 2, fillColor: "#16a34a", fillOpacity: 1 }).bindTooltip(d.start_name).addTo(layer);
-  map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+    html: `<div class="pin">${i + 1}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }) })
+    .bindTooltip(`${i + 1}. ${s.name}, ${s.arrive}`).addTo(layer));
+  L.circleMarker(it.walks[0].path[0], { radius: 7, color: "#fff", weight: 2, fillColor: css("--ink") || "#18324a", fillOpacity: 1 }).bindTooltip(d.start_name).addTo(layer);
+  // Frame the bars, not the ride home — the crawl is the part you walk.
+  map.fitBounds(L.latLngBounds([it.walks[0].path[0], ...it.stops.map(s => [s.lat, s.lon])]), { padding: [50, 50], maxZoom: 17 });
 }
 
-function renderAll() {
+function renderAll(fresh) {
   const s = plan.stats;
-  $("meta").innerHTML = `<b>${esc(plan.origin_name)} → ${esc(plan.destination_name)}</b> · ${s.candidates} candidate trips from 4 specialists ·
-    ${s.feasible} passed the Critic · ${s.frontier} on the Pareto frontier · ${s.ms} ms · ${s.llm ? "Claude agents live" : "offline mode (rules + templates)"}`;
-  renderLive(); renderResults(); renderTrace(); drawTrip();
+  $("results-head").style.display = "block";
+  $("meta").textContent = `${plan.origin_name} to ${plan.destination_name}`;
+  $("meta-sub").textContent = `${s.candidates} trips considered, ${s.feasible} passed every check.` +
+    (s.llm ? "" : " Claude is off, so plain-English questions use simple rules.");
+  renderLive(); renderResults(fresh); renderTrace(); drawTrip();
 }
 
 function renderLive() {
-  const lv = plan.live, w = lv.weather;
-  const icon = { rain: "🌧", fog: "🌫", clear: "☀️" }[lv.condition] || "☀️";
-  $("wx").style.display = "block";
-  $("wx").innerHTML = w
-    ? `${icon} <b>${w.temp_f}°F</b> ${esc(w.summary)} · wind ${w.wind_mph} mph · rain ${w.precip_pct}% <span style="color:var(--muted);font-size:12px">— NWS forecast for ${hourLabel(plan.request.hour)}</span>`
-    : `${icon} <b>${esc(lv.condition)}</b> <span style="color:var(--muted);font-size:12px">— ${plan.request.weather === "live" ? "live weather unavailable, assumed" : "set manually"}</span>`;
-  const badge = (label, on) => `<span class="${on ? "on" : "off"}">${esc(label)}</span>`;
+  const lv = plan.live;
+  $("wx").innerHTML = weatherText(lv.weather, lv.condition) + (lv.weather ? "" : plan.request.weather === "live" ? " (assumed)" : "");
+  const src = (label, on) => `<span class="src ${on ? "on" : ""}">${esc(label)}</span>`;
   $("sources").innerHTML = [
-    badge(`Weather: ${w ? "NWS live" : "manual"}`, !!w),
-    badge(`Routes: ${lv.routes}`, lv.routes.startsWith("OSRM")),
-    badge(`Transit: ${lv.transit}`, lv.transit === "511 live"),
-    badge(`Bikes: ${lv.bikes}`, lv.bikes === "GBFS live"),
-    badge(`511 calls ${lv.five11.calls_last_hour}/${lv.five11.budget} this hour`, lv.five11.enabled),
+    src(lv.routes.startsWith("OSRM") ? "Street routes" : "Estimated routes", lv.routes.startsWith("OSRM")),
+    src(lv.transit === "511 live" ? "Live arrivals" : "Scheduled arrivals", lv.transit === "511 live"),
+    src(lv.bikes === "GBFS live" ? "Live bike docks" : "Estimated bike docks", lv.bikes === "GBFS live"),
   ].join("");
 }
 
-function renderResults() {
+// "Best for Burn · Fastest · Cheapest" → "Best for Burn, also fastest and cheapest"
+function labelText(label) {
+  const [first, ...rest] = label.split(" · ");
+  if (!rest.length) return first;
+  const extra = rest.map(s => s.toLowerCase());
+  const list = extra.length > 1 ? `${extra.slice(0, -1).join(", ")} and ${extra.at(-1)}` : extra[0];
+  return `${first}, also ${list}`;
+}
+
+function legDetail(l) {
+  const bits = [`${l.distance_mi} mi`, mins(l.minutes) + (l.wait_min ? ` + ${Math.round(l.wait_min)} min wait` : "")];
+  if (l.cost) bits.push(`$${l.cost.toFixed(2)}`);
+  if (l.surge > 1) bits.push(`${l.surge}× surge`);
+  if (l.mode === "walk" && l.grade > 0.04) bits.push("uphill");
+  return bits.join(", ");
+}
+
+function renderResults(fresh) {
   $("results").innerHTML = options.map((o, i) => {
-    const strip = o.legs.map(l => `<div style="flex:${Math.max(l.minutes + l.wait_min, 1)};background:${COLORS[l.mode]}" title="${MODE_NAMES[l.mode]} ${l.minutes} min"></div>`).join("");
-    const legs = o.legs.map(l => `<li><i class="dot" style="background:${COLORS[l.mode]}"></i><span>
-      <b>${MODE_NAMES[l.mode]}</b> ${l.line ? esc(l.line) + " " : ""}${l.distance_mi} mi → ${esc(l.to_name)}
-      <span style="color:var(--muted)">· ${Math.round(l.minutes)} min${l.wait_min ? ` + ${Math.round(l.wait_min)} wait` : ""}${l.cost ? ` · $${l.cost.toFixed(2)}` : ""}${l.surge > 1 ? ` · ⚡${l.surge}× surge` : ""}${l.mode === "walk" && l.grade > 0.04 ? " · ⛰ uphill" : ""}${l.note ? ` · <i>${esc(l.note)}</i>` : ""}</span></span></li>`).join("");
-    return `<div class="card ${i === active ? "active" : ""}" data-i="${i}">
-      <div class="top"><span class="label">${esc(o.label)}</span><span class="cost">$${o.cost.toFixed(2)}</span></div>
-      <div class="metrics">
-        <div><b>${Math.round(o.total_min)} min</b>door to door</div>
-        <div><b>${o.kcal}</b>kcal</div>
-        <div><b>${o.steps.toLocaleString()}</b>steps</div>
-        <div><b>${o.climb_ft} ft</b>climb</div>
+    const total = o.legs.reduce((a, l) => a + l.minutes + l.wait_min, 0) || 1;
+    const segs = o.legs.map(l => `<div class="seg ${l.mode}" style="--c:${cvar(l.mode)};flex:${Math.max((l.minutes + l.wait_min) / total, 0.12)}">
+        <span class="tag2">${MODE_NAMES[l.mode]} ${Math.round(l.minutes + l.wait_min)}m</span><div class="bar"></div></div>`).join("");
+    const legs = o.legs.map(l => `<li style="--c:${cvar(l.mode)}"><span class="m">${MODE_NAMES[l.mode]}</span>
+        <span><span class="d">${l.line ? esc(l.line) + " to " : "To "}${esc(l.to_name)}</span><br>
+        <span class="x">${esc(legDetail(l))}${l.note ? `. ${esc(l.note)}` : ""}</span></span></li>`).join("");
+    return `<article class="opt ${i === active ? "active" : ""}" data-i="${i}" tabindex="0" aria-label="${esc(labelText(o.label))}">
+      <div class="label">${esc(labelText(o.label))}</div>
+      <div class="headline">
+        <span class="big">${Math.round(o.total_min)}<small>min</small></span>
+        <span class="big">$${o.cost.toFixed(2)}</span>
+        <span class="side"><b>${o.kcal}</b> kcal<br><b>${o.steps.toLocaleString()}</b> steps${o.climb_ft ? `, <b>${o.climb_ft}</b> ft up` : ""}</span>
       </div>
-      <div class="strip">${strip}</div>
+      <div class="line ${fresh ? "draw" : ""}" role="img" aria-label="${o.legs.map(l => MODE_NAMES[l.mode]).join(", then ")}">${segs}<span class="end-wrap"><span class="end"></span></span></div>
       <ul class="legs">${legs}</ul>
-      <div class="why">${esc(o.why)}</div>
+      ${o.why ? `<p class="why">${esc(o.why)}</p>` : ""}
       ${o.flags.length ? `<div class="flags">${o.flags.map(f => `<span>${esc(f)}</span>`).join("")}</div>` : ""}
       <button class="book" data-book="${i}">Book this trip</button>
-    </div>`;
+    </article>`;
   }).join("");
 }
 
 function renderTrace() {
   $("trace-box").style.display = "block";
-  $("trace").innerHTML = `<table><tr><th>Agent</th><th>Kind</th><th>Model</th><th>ms</th><th>Detail</th></tr>` +
-    plan.trace.map(t => `<tr><td><b>${esc(t.agent)}</b></td><td>${esc(t.kind)}</td><td>${esc(t.model)}</td><td>${t.ms}</td><td>${esc(t.detail)}${t.tokens ? ` <i>(${t.tokens} tok)</i>` : ""}</td></tr>`).join("") + "</table>";
+  $("trace").innerHTML = `<table><tr><th>Agent</th><th>Ran as</th><th>ms</th><th>What it did</th></tr>` +
+    plan.trace.map(t => `<tr><td><b>${esc(t.agent)}</b></td><td>${esc(t.kind)}${t.model !== "—" ? `<br>${esc(t.model)}` : ""}</td><td class="num-tab">${t.ms}</td><td>${esc(t.detail)}${t.tokens ? ` (${t.tokens} tokens)` : ""}</td></tr>`).join("") + "</table>";
   $("rej-box").style.display = plan.rejected.length ? "block" : "none";
-  $("rejected").innerHTML = "<ul>" + plan.rejected.map(r => `<li>${esc(r.trip)} — ${esc(r.reasons.join("; "))}</li>`).join("") + "</ul>";
+  $("rejected").innerHTML = "<ul>" + plan.rejected.map(r => `<li>${esc(r.trip)}: ${esc(r.reasons.join("; "))}</li>`).join("") + "</ul>";
 }
 
 function drawTrip() {
@@ -437,32 +603,35 @@ function drawTrip() {
   const o = options[active];
   if (!o) return;
   for (const l of o.legs) {
-    L.polyline(l.path, { color: COLORS[l.mode], weight: l.mode === "walk" ? 4 : 6,
-      dashArray: l.mode === "walk" ? "2 8" : null, opacity: 0.9 })
-      .bindTooltip(`${MODE_NAMES[l.mode]}: ${l.frm_name} → ${l.to_name}`).addTo(layer);
+    const walk = l.mode === "walk";
+    L.polyline(l.path, { color: COLORS[l.mode], weight: walk ? 5 : 6, lineCap: "round",
+      dashArray: walk ? "1 9" : null, opacity: 0.95 })
+      .bindTooltip(`${MODE_NAMES[l.mode]}: ${l.frm_name} to ${l.to_name}`).addTo(layer);
   }
   // Transfer points: where one mode hands off to the next (e.g. walk → ride pickup).
   o.legs.slice(1).forEach((l, i) => {
     const prev = o.legs[i];
     L.circleMarker(l.path[0], { radius: 6, color: COLORS[l.mode], weight: 3, fillColor: "#fff", fillOpacity: 1 })
-      .bindTooltip(`${MODE_NAMES[prev.mode]} → ${MODE_NAMES[l.mode]} at ${l.frm_name}`, { permanent: true, direction: "top", offset: [0, -6] })
+      .bindTooltip(`${MODE_NAMES[prev.mode]} to ${MODE_NAMES[l.mode]} at ${l.frm_name}`, { permanent: true, direction: "top", offset: [0, -6] })
       .addTo(layer);
   });
   const start = o.legs[0].path[0], end = o.legs.at(-1).path.at(-1);
-  L.circleMarker(start, { radius: 8, color: "#fff", weight: 2, fillColor: "#16a34a", fillOpacity: 1 }).bindTooltip(plan.origin_name).addTo(layer);
-  L.circleMarker(end, { radius: 8, color: "#fff", weight: 2, fillColor: "#dc2626", fillOpacity: 1 }).bindTooltip(plan.destination_name).addTo(layer);
+  L.circleMarker(start, { radius: 8, color: "#fff", weight: 2, fillColor: "#18324a", fillOpacity: 1 }).bindTooltip(plan.origin_name).addTo(layer);
+  L.circleMarker(end, { radius: 8, color: "#e5482a", weight: 4, fillColor: "#fff", fillOpacity: 1 }).bindTooltip(plan.destination_name).addTo(layer);
   map.fitBounds(layer.getBounds(), { padding: [40, 40] });
 }
 
 function book(i) {
   const o = options[i];
   const rides = o.legs.filter(l => l.mode === "ride");
-  $("modal-body").innerHTML = `<h3 style="margin-top:0">Trip booked (demo)</h3>
-    <p>${rides.length ? `Your driver will meet you at <b>${esc(rides[0].frm_name)}</b> in ~${rides[0].wait_min} min.` : "No ride needed — this trip is walk / transit / bike only."}</p>
-    <p style="color:var(--muted);font-size:13px">${Math.round(o.total_min)} min · $${o.cost.toFixed(2)} · ${o.kcal} kcal · ${o.steps.toLocaleString()} steps</p>
-    <p style="color:var(--muted);font-size:12px">Prototype only — no real ride was requested and no payment was taken.</p>
-    <button class="go" onclick="document.getElementById('modal').classList.remove('open')">Done</button>`;
+  $("modal-body").innerHTML = `<h3>Trip booked</h3>
+    <p>${rides.length ? `Your driver will meet you at <b>${esc(rides[0].frm_name)}</b> in about ${rides[0].wait_min} min.` : "No ride needed. This trip is walking, transit, or bike only."}</p>
+    <p class="fine">${Math.round(o.total_min)} min, $${o.cost.toFixed(2)}, ${o.kcal} kcal, ${o.steps.toLocaleString()} steps.</p>
+    <p class="fine">This is a demo. No ride was requested and no payment was taken.</p>
+    <button class="go" id="modal-done">Done</button>`;
   $("modal").classList.add("open");
+  $("modal-done").focus();
+  $("modal-done").onclick = () => $("modal").classList.remove("open");
 }
 
 window.addEventListener("resize", () => map.invalidateSize());
@@ -484,16 +653,24 @@ $("vibes").addEventListener("click", e => {
   const b = e.target.closest("[data-vibe]");
   if (!b) return;
   vibe = b.dataset.vibe;
-  document.querySelectorAll("#vibes button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll("#vibes button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
 });
 $("c-go").onclick = planCrawl;
 $("results").addEventListener("click", e => {
   const bk = e.target.closest("[data-book]");
   if (bk) { book(+bk.dataset.book); return; }
-  const card = e.target.closest(".card");
-  if (card) { active = +card.dataset.i; renderResults(); drawTrip(); }
+  const card = e.target.closest(".opt");
+  if (card) { active = +card.dataset.i; renderResults(false); drawTrip(); }
+});
+$("results").addEventListener("keydown", e => {
+  const card = e.target.closest(".opt");
+  if (card && (e.key === "Enter" || e.key === " ") && !e.target.closest("button")) {
+    e.preventDefault(); active = +card.dataset.i; renderResults(false); drawTrip();
+    document.querySelector(`.opt[data-i="${active}"]`)?.focus();
+  }
 });
 $("modal").addEventListener("click", e => { if (e.target.id === "modal") $("modal").classList.remove("open"); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("modal").classList.remove("open"); });
 init();
 </script>
 </body>

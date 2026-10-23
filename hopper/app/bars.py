@@ -124,8 +124,11 @@ def why_cool(bar):
     if t.get("food") == "yes" or "cuisine" in t:
         bits.append("serves food")
     if t.get("description"):
-        bits.append(t["description"][:80])
-    return " · ".join(bits) or f"neighborhood {bar['type']}"
+        bits.append(t["description"][:80].rstrip("."))
+    if not bits:
+        return f"Neighborhood {bar['type']}."
+    text = ", ".join(bits)
+    return text[0].upper() + text[1:] + "."
 
 
 def _pt(bar):
