@@ -1,4 +1,4 @@
-# StepShift — SF multimodal commute prototype
+# Hopper — SF multimodal commute prototype
 
 Uber-style trip planner that mixes **walk + ride-hail + Muni/BART/cable car + Bay Wheels**
 in one trip, and ranks options by **time, cost, and health** (kcal, steps, climb).
@@ -7,12 +7,12 @@ San Francisco only.
 ## Run
 
 ```bash
-cd stepshift
+cd hopper
 PORT=5080 python3 -m app.server        # needs flask + anthropic
 ```
 
 Open http://localhost:5080. With `ANTHROPIC_API_KEY` set, the Intent and Explainer agents
-use Claude (`claude-haiku-5-5`); without it (or with `STEPSHIFT_OFFLINE=1`) they fall back to
+use Claude (`claude-haiku-5-5`); without it (or with `HOPPER_OFFLINE=1`) they fall back to
 a rule parser and templates. Every number is identical in both modes.
 
 Tests: `python3 -m pytest -q tests` (no network — live feeds are tested with sample payloads)
@@ -25,13 +25,13 @@ Tests: `python3 -m pytest -q tests` (no network — live feeds are tested with s
 | **NWS** api.weather.gov | Hourly forecast at the origin → rain/fog/clear, wind (> 20 mph turns bikes off) | none | Assume clear (or pick weather manually) |
 | **Bay Wheels GBFS** | Real classic / e-bike counts and open docks at the nearest station | none | Deterministic pseudo-availability |
 
-- Put keys in `stepshift/.env` (see `.env.example`; git-ignored). Real env vars win.
+- Put keys in `hopper/.env` (see `.env.example`; git-ignored). Real env vars win.
 - Live arrivals and docks are used only when the trip leaves **this hour** (SF time);
   future hours use schedules.
 - 511's free tier is ~60 calls/hour: stop lists are cached on disk for a day, arrivals for
   90 s, alerts for 10 min; at most 4 arrival lookups per plan; a rolling budget
   (`FIVE11_HOURLY_BUDGET`, default 50) stops calls before 511 refuses them.
-- `STEPSHIFT_OFFLINE=1` turns off every live feed and Claude.
+- `HOPPER_OFFLINE=1` turns off every live feed and Claude.
 - The UI shows a weather strip and badges saying which sources were live for each plan.
 
 ## Agent swarm

@@ -1,4 +1,4 @@
-# StepShift — Project Prompt
+# Hopper — Project Prompt
 
 > Paste everything below the line into a fresh Claude Code session in an empty folder to
 > rebuild this project. It captures the design as built **and** the fixes learned while
@@ -6,7 +6,7 @@
 
 ---
 
-Build **StepShift**, a San Francisco–only prototype of an Uber-style app that plans
+Build **Hopper**, a San Francisco–only prototype of an Uber-style app that plans
 **combined multi-leg trips** — e.g. walk 1 mile → ride-hail → walk the last block — and
 ranks them by **time, cost, and health** (active kcal, steps, hill climb).
 
@@ -32,7 +32,7 @@ at a time — keep it short, this spec answers most questions) → `writing-plan
 **LLM agents do language; deterministic Python tools do every number.** No agent ever
 computes a fare, time, distance, or calorie count. Every `Leg` records the tool that
 produced it (`source`), and the Critic rejects any leg without one. The app must work
-fully offline: with no `ANTHROPIC_API_KEY` (or `STEPSHIFT_OFFLINE=1`), LLM agents fall
+fully offline: with no `ANTHROPIC_API_KEY` (or `HOPPER_OFFLINE=1`), LLM agents fall
 back to rules/templates and every number stays identical.
 
 ## Data fixtures (`data.py`, all approximate, offline)

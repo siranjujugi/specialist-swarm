@@ -1,4 +1,4 @@
-"""StepShift specialist swarm.
+"""Hopper specialist swarm.
 
 Language work (understanding the request, explaining the result) goes to Claude.
 Number work (routes, fares, calories, ranking, validation) goes to deterministic
@@ -18,8 +18,8 @@ from . import bikes, five11, tools, weather
 from .data import BIKE_DOCKS, PLACES, TRANSIT_LINES
 from .live import FeedError
 
-INTENT_MODEL = os.environ.get("STEPSHIFT_INTENT_MODEL", "claude-haiku-5-5")
-EXPLAIN_MODEL = os.environ.get("STEPSHIFT_EXPLAIN_MODEL", "claude-haiku-5-5")
+INTENT_MODEL = os.environ.get("HOPPER_INTENT_MODEL", "claude-haiku-5-5")
+EXPLAIN_MODEL = os.environ.get("HOPPER_EXPLAIN_MODEL", "claude-haiku-5-5")
 SF_TZ = ZoneInfo("America/Los_Angeles")
 MAX_REALTIME_LOOKUPS = 4      # unique (line, board, alight) per plan — protects 511's 60/hr
 
@@ -34,7 +34,7 @@ DEFAULTS = {"hour": 12, "weather": "live", "event": False, "weight_kg": 75,
 
 
 def _llm():
-    if os.environ.get("STEPSHIFT_OFFLINE") == "1" or not os.environ.get("ANTHROPIC_API_KEY"):
+    if os.environ.get("HOPPER_OFFLINE") == "1" or not os.environ.get("ANTHROPIC_API_KEY"):
         return None
     try:
         from anthropic import Anthropic
@@ -393,7 +393,7 @@ def is_walk_ride(trip):
 def ranker_agent(trips, weights, trace):
     t0 = time.perf_counter()
     picks, front, scores = tools.pick_options(trips, weights)
-    # StepShift's signature combo: always show the best walk + ride trip, even when bikes
+    # Hopper's signature combo: always show the best walk + ride trip, even when bikes
     # or transit push it off the Pareto frontier — it's the option riders came for.
     note = ""
     if not any(is_walk_ride(t) for t, _ in picks):

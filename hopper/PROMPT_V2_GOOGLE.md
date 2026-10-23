@@ -1,13 +1,13 @@
-# StepShift v2 — Complete Project Prompt
+# Hopper v2 — Complete Project Prompt
 
 > Self-contained build prompt. Paste everything below the line into a fresh Claude Code
 > session in an empty folder. No other files or prior context are needed.
 
 ---
 
-# Build StepShift v2
+# Build Hopper v2
 
-**StepShift** is an Uber-style trip planner for **San Francisco** (city limits, plus trips
+**Hopper** is an Uber-style trip planner for **San Francisco** (city limits, plus trips
 to and from **SFO airport**). Instead of selling one ride, it combines travel modes in one
 trip — walk → ride-hail → walk, walk → BART → walk, bike → Muni → walk — and picks the
 best combination for the rider's **Mode** and the **current weather**. It runs on
@@ -26,7 +26,7 @@ Use the superpowers skills, in order:
 
 1. `superpowers:brainstorming` — this spec answers most questions; ask only about real
    gaps, one question at a time, then save the approved design to
-   `docs/specs/<date>-stepshift-v2-design.md`.
+   `docs/specs/<date>-hopper-v2-design.md`.
 2. `superpowers:writing-plans` — bite-sized tasks, each with files, a failing test first,
    and an exact acceptance check.
 3. `superpowers:subagent-driven-development` — one fresh subagent per task, reviewed
@@ -46,7 +46,7 @@ distances, calories, grades, bar "cool scores", and rankings come from tools. Ev
 records the tool that produced it in `source` (e.g. `google.routes.walk`,
 `fare_model.simulated`), and the Critic rejects any leg without one.
 
-With no `ANTHROPIC_API_KEY` (or `STEPSHIFT_OFFLINE=1`), LLM agents fall back to rule
+With no `ANTHROPIC_API_KEY` (or `HOPPER_OFFLINE=1`), LLM agents fall back to rule
 parsers and sentence templates — **every number stays identical**.
 
 ## 3. Stack and layout
@@ -171,8 +171,8 @@ Weather API. The Context agent applies per-Mode adjustments:
   to ~50 m + travel mode + 5-minute departure bucket. Count cache hits in the trace.
 - **Hard cap: ≤ 12 Google calls per plan.** Prune candidates with `computeRouteMatrix`
   before calling `computeRoutes` for finalists only.
-- **Record/replay**: `STEPSHIFT_RECORD=1` saves responses to `fixtures/google/`;
-  `STEPSHIFT_REPLAY=1` serves them, so tests and demos need no key, network, or spend.
+- **Record/replay**: `HOPPER_RECORD=1` saves responses to `fixtures/google/`;
+  `HOPPER_REPLAY=1` serves them, so tests and demos need no key, network, or spend.
 
 ## 8. Pricing and health (deterministic, in `tools.py`)
 

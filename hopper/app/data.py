@@ -1,4 +1,4 @@
-"""Static San Francisco fixtures for the StepShift prototype.
+"""Static San Francisco fixtures for the Hopper prototype.
 
 Everything here is approximate and offline on purpose: coordinates and
 elevations are rounded, transit is a simplified subset of real lines, fares are

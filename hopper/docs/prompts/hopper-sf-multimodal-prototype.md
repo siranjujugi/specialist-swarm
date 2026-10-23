@@ -1,14 +1,14 @@
-# Build Prompt — StepShift (SF multimodal commute prototype)
+# Build Prompt — Hopper (SF multimodal commute prototype)
 
 > Paste everything below the line into a fresh Claude Code session, in an empty project folder.
 
 ---
 
-You are building **StepShift**, a working prototype of an Uber-like app that does NOT just sell a ride. It plans **combined, multi-leg trips** — e.g. walk 1 mile → ride-hail 2.5 miles → walk the last 0.3 mile — and lets the rider choose the trade-off between **time, cost, and health**. Scope is **San Francisco only**.
+You are building **Hopper**, a working prototype of an Uber-like app that does NOT just sell a ride. It plans **combined, multi-leg trips** — e.g. walk 1 mile → ride-hail 2.5 miles → walk the last 0.3 mile — and lets the rider choose the trade-off between **time, cost, and health**. Scope is **San Francisco only**.
 
 ## How you must work (superpowers workflow — non-negotiable)
 
-1. **`superpowers:brainstorming` first.** Ask me clarifying questions ONE at a time before designing anything. Cover at least: who the target rider is, which modes are in v1, how health is personalized, what "booking" means in a prototype, and what the demo must show. Then write the approved design to `docs/specs/YYYY-MM-DD-stepshift-design.md`.
+1. **`superpowers:brainstorming` first.** Ask me clarifying questions ONE at a time before designing anything. Cover at least: who the target rider is, which modes are in v1, how health is personalized, what "booking" means in a prototype, and what the demo must show. Then write the approved design to `docs/specs/YYYY-MM-DD-hopper-design.md`.
 2. **`superpowers:writing-plans`** — turn the spec into a bite-sized implementation plan in `docs/plans/`. Each task: files touched, test first, exact acceptance check.
 3. **`superpowers:using-git-worktrees`** — implement on a feature branch in its own worktree.
 4. **`superpowers:subagent-driven-development`** — execute the plan with one fresh subagent per task, reviewing each task's output before moving on. Independent tasks (e.g. the specialist tools below) may be dispatched in parallel via `superpowers:dispatching-parallel-agents`.

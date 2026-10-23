@@ -65,7 +65,7 @@ def test_weather_classification():
 
 
 def test_live_weather_failure_falls_back_to_clear(monkeypatch):
-    monkeypatch.setenv("STEPSHIFT_OFFLINE", "1")
+    monkeypatch.setenv("HOPPER_OFFLINE", "1")
     req = {**agents.DEFAULTS, "origin": "ferry_building", "destination": "coit_tower",
            "hour": 12, "weather": "live"}
     trace = agents.Trace()

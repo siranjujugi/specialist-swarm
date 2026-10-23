@@ -2,7 +2,7 @@
 per-hour call budget (511's free tier allows ~60 requests/hour per key).
 
 Every feed module goes through `get_json` so caching and budgets live in one place,
-and `STEPSHIFT_OFFLINE=1` turns every live feed off for tests and demos.
+and `HOPPER_OFFLINE=1` turns every live feed off for tests and demos.
 """
 import gzip
 import hashlib
@@ -15,7 +15,7 @@ import urllib.request
 from collections import deque
 from pathlib import Path
 
-USER_AGENT = "StepShift-POC/0.2 (prototype; contact: local)"
+USER_AGENT = "Hopper-POC/0.2 (prototype; contact: local)"
 DISK_CACHE = Path(__file__).resolve().parent.parent / ".cache"
 
 _mem = {}
@@ -51,7 +51,7 @@ class Budget:
 
 
 def offline():
-    return os.environ.get("STEPSHIFT_OFFLINE") == "1"
+    return os.environ.get("HOPPER_OFFLINE") == "1"
 
 
 def get_json(url, params=None, ttl=60, disk_ttl=None, budget=None, timeout=12, redact=()):

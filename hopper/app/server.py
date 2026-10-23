@@ -1,4 +1,4 @@
-"""StepShift Flask server: /api/plan runs the swarm, /api/rerank re-runs only the Ranker."""
+"""Hopper Flask server: /api/plan runs the swarm, /api/rerank re-runs only the Ranker."""
 import os
 import uuid
 from collections import OrderedDict
@@ -8,7 +8,7 @@ from flask import Flask, jsonify, request, send_from_directory
 
 
 def load_dotenv(path=Path(__file__).resolve().parent.parent / ".env"):
-    """Minimal KEY=VALUE loader so FIVE11_API_KEY can live in stepshift/.env (git-ignored).
+    """Minimal KEY=VALUE loader so FIVE11_API_KEY can live in hopper/.env (git-ignored).
     Real environment variables always win."""
     if path.exists():
         for line in path.read_text().splitlines():
