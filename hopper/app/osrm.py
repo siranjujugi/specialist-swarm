@@ -7,6 +7,7 @@ will actually see, and a rolling budget keeps usage polite.
 Override with OSRM_BASE_URL (e.g. a local `osrm-backend` container) for heavier use.
 """
 import os
+import time
 
 from .live import Budget, FeedError, get_json
 
@@ -35,6 +36,12 @@ def route(mode, a_latlon, b_latlon):
     # FOSSGIS serves each profile under its own prefix; the path segment stays "driving".
     url = (f"{BASE}/routed-{profile}/route/v1/driving/"
            f"{alon:.5f},{alat:.5f};{blon:.5f},{blat:.5f}")
-    data, meta = get_json(url, {"overview": "full", "geometries": "geojson"},
-                          ttl=86400, disk_ttl=86400, budget=BUDGET, timeout=10)
+    params = {"overview": "full", "geometries": "geojson"}
+    try:
+        data, meta = get_json(url, params, ttl=86400, disk_ttl=86400, budget=BUDGET, timeout=6)
+    except FeedError as e:
+        if "429" not in str(e):
+            raise
+        time.sleep(1.0)            # shared server asked us to slow down — one polite retry
+        data, meta = get_json(url, params, ttl=86400, disk_ttl=86400, budget=BUDGET, timeout=6)
     return {**parse_route(data), "cache": meta["cache"]}

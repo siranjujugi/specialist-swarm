@@ -10,11 +10,11 @@ import json
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from . import bikes, five11, osrm, tools, weather
+from . import bikes, five11, modes, osrm, tools, weather
 from .data import BIKE_DOCKS, PLACES, TRANSIT_LINES
 from .live import FeedError
 
@@ -23,6 +23,7 @@ EXPLAIN_MODEL = os.environ.get("HOPPER_EXPLAIN_MODEL", "claude-haiku-5-5")
 SF_TZ = ZoneInfo("America/Los_Angeles")
 MAX_REALTIME_LOOKUPS = 4      # unique (line, board, alight) per plan — protects 511's 60/hr
 MAX_ROUTED_LEGS = 60          # unique street legs per plan sent to OSRM (cached for a day)
+ROUTING_BUDGET_S = 8.0        # wall-clock cap on OSRM per plan
 
 
 def sf_hour():
@@ -30,7 +31,9 @@ def sf_hour():
 
 DEFAULTS = {"hour": 12, "weather": "live", "event": False, "weight_kg": 75,
             "weights": {"time": 1.0, "cost": 1.0, "health": 1.0},
-            "max_walk_leg_mi": 1.5, "max_total_walk_mi": 2.5, "avoid_steep": False,
+            # Plans use the loosest Mode limits so every Mode can re-rank the cached trips.
+            "max_walk_leg_mi": 2.0, "max_total_walk_mi": 3.0, "avoid_steep": False,
+            "mode": "hustle",
             "max_cost": None, "step_goal": 8000}
 
 
@@ -111,6 +114,13 @@ def parse_intent_rules(query):
         out["event"] = True
     if re.search(r"no hills|avoid hills|flat", q):
         out["avoid_steep"] = True
+    for mode, pattern in (("barcrawl", r"\bbars?\b|drinks|crawl|bar hop|pub crawl|night out"),
+                          ("burn", r"workout|exercise|steps|burn|calorie"),
+                          ("broke", r"cheap|budget|broke|save money"),
+                          ("hustle", r"fast|quick|hurry|late|asap")):
+        if re.search(pattern, q):
+            out["mode"] = mode
+            break
     return {k: v for k, v in out.items() if v is not None}
 
 
@@ -129,6 +139,11 @@ INTENT_TOOL = {
             "event": {"type": ["boolean", "null"],
                       "description": "Giants/Warriors game or big event nearby"},
             "avoid_steep": {"type": ["boolean", "null"]},
+            "mode": {"type": ["string", "null"],
+                     "enum": ["hustle", "broke", "burn", "barcrawl", None],
+                     "description": "hustle = fastest / late; broke = cheapest; burn = part "
+                                    "transit, part workout; barcrawl = visit bars / night out. "
+                                    "Null if the rider gave no hint."},
             "weights": {"type": ["object", "null"],
                         "description": "Relative 0-3 importance of time, cost, health",
                         "properties": {"time": {"type": "number"}, "cost": {"type": "number"},
@@ -209,21 +224,28 @@ def ride_specialist(req):
 def transit_specialist(req):
     o, d, h, ev, kg = req["origin"], req["destination"], req["hour"], req["event"], req["weight_kg"]
     trips = []
+    base = tools.haversine_mi(o, d)
+    reach = req["max_walk_leg_mi"] / tools.WALK_CIRCUITY      # straight-line walking reach
     for line in TRANSIT_LINES:
         # Don't walk away from the destination just to catch a train.
-        base = tools.haversine_mi(o, d)
-        boards = [s for s in tools.nearest(o, line["stops"], 1.2)
-                  if tools.haversine_mi(s, d) <= base + 0.15][:2]
+        toward = [s for s in line["stops"] if tools.haversine_mi(s, d) <= base + 0.15]
+        boards = [s for s in tools.nearest(o, toward, 1.2)][:2]
         alights = tools.nearest(d, line["stops"], 2.5)[:2]
+        # Burn-style hybrids: walk to a stop farther along, or hop off early and walk in.
+        boards += [s for s in tools.nearest(o, toward, reach)
+                   if s not in boards and tools.haversine_mi(o, s) >= 0.4][-2:]
+        alights += [s for s in tools.nearest(d, line["stops"], reach)
+                    if s not in alights and tools.haversine_mi(s, d) >= 0.4
+                    and tools.haversine_mi(s, d) < base][:2]
         for b in boards:
             for a in alights:
-                if a == b:
+                if a == b or tools.haversine_mi(a, d) >= tools.haversine_mi(b, d):
                     continue
                 legs = ([tools.walk_leg(o, b, kg)] if b != o else []) + \
                     [tools.transit_leg(line, b, a)]
                 if a != d:
                     walk_out = tools.walk_leg(a, d, kg)
-                    if walk_out.distance_mi <= 1.2:
+                    if walk_out.distance_mi <= req["max_walk_leg_mi"]:
                         trips.append(tools.Trip(legs + [walk_out], "Transit"))
                     trips.append(tools.Trip(legs + [tools.ride_leg(a, d, h, ev)], "Transit"))
                 else:
@@ -385,24 +407,32 @@ def routing_agent(trips, req, trace):
                 todo.setdefault((l.mode, l.frm, l.to), l)
     keys = list(todo)[:MAX_ROUTED_LEGS]
     routed, caches, failed = {}, {"live": 0, "memory": 0, "disk": 0}, 0
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {k: pool.submit(_street_leg, todo[k], req) for k in keys}
-        for k, f in futures.items():
-            try:
-                routed[k], cache = f.result()
-                caches[cache] = caches.get(cache, 0) + 1
-            except FeedError:
-                failed += 1
+    # 2 at a time is polite to the shared OSRM server; legs still pending when the time
+    # budget runs out keep their estimates (they're usually cached by the next plan).
+    pool = ThreadPoolExecutor(max_workers=2)
+    futures = {k: pool.submit(_street_leg, todo[k], req) for k in keys}
+    done, _ = wait(futures.values(), timeout=ROUTING_BUDGET_S)
+    pool.shutdown(wait=False, cancel_futures=True)
+    for k, f in futures.items():
+        if f not in done:
+            continue
+        try:
+            routed[k], cache = f.result()
+            caches[cache] = caches.get(cache, 0) + 1
+        except FeedError:
+            failed += 1
+    timed_out = sum(1 for f in futures.values() if f not in done)
     for t in trips:
         t.legs = [routed.get((l.mode, l.frm, l.to), l) for l in t.legs]
     skipped = len(todo) - len(keys)
     trace.log("Routing (OSRM)", "tools", (time.perf_counter() - t0) * 1000,
               f"{len(routed)} street legs routed ({caches['live']} live, "
               f"{caches['memory'] + caches['disk']} cached), {failed} failed"
+              + (f", {timed_out} past the {ROUTING_BUDGET_S:.0f}s budget" if timed_out else "")
               + (f", {skipped} over cap kept as estimates" if skipped else ""))
     if not routed:
         return "estimated (OSRM unavailable)"
-    return "OSRM streets" if not failed and not skipped else "OSRM streets (partial)"
+    return "OSRM streets" if not (failed or skipped or timed_out) else "OSRM streets (partial)"
 
 
 def osrm_off():
@@ -445,9 +475,19 @@ def is_walk_ride(trip):
     return {l.mode for l in trip.legs} == {"walk", "ride"}
 
 
-def ranker_agent(trips, weights, trace):
+def ranker_agent(trips, weights, trace, mode=None, caps=None):
     t0 = time.perf_counter()
+    trips, notice = modes.mode_filter(trips, mode, caps)
+    if mode in modes.TRIP_MODES:
+        weights = modes.MODES[mode]["weights"]
     picks, front, scores = tools.pick_options(trips, weights)
+    if mode in modes.TRIP_MODES:
+        best = f"Best for {modes.MODES[mode]['label']}"
+        picks[0] = (picks[0][0], picks[0][1].replace("Recommended", best))
+    for t, _ in picks:
+        if mode == "burn":
+            t.flags = [f for f in t.flags if not f.startswith("🔥")] + [
+                f"🔥 {round(100 * modes.active_share(t))}% active"]
     # Hopper's signature combo: always show the best walk + ride trip, even when bikes
     # or transit push it off the Pareto frontier — it's the option riders came for.
     note = ""
@@ -464,8 +504,9 @@ def ranker_agent(trips, weights, trace):
             scores = {**scores, best.id: all_scores[best.id]}
             note = "; added best Walk + Ride combo"
     trace.log("Ranker", "tools", (time.perf_counter() - t0) * 1000,
-              f"{len(front)} on Pareto frontier of {len(trips)}; weights {weights}{note}")
-    return picks, front, scores
+              f"mode {mode or 'custom'}: {len(front)} on Pareto frontier of {len(trips)}; "
+              f"weights {weights}{note}" + (f"; {notice}" if notice else ""))
+    return picks, front, scores, notice
 
 
 # ── Explainer (LLM, with template fallback) ──────────────────────────────────
@@ -580,6 +621,10 @@ def orchestrate(body):
         req.update({k: v for k, v in parsed.items() if k != "weights"})
         if "weights" in parsed:
             req["weights"] = {**req["weights"], **parsed["weights"]}
+    if req["mode"] == "barcrawl":
+        # Bar Crawl is a different planner with a 21+ gate — hand back to the UI.
+        return {"redirect": "barcrawl", "start": req.get("origin"), "end": req.get("destination"),
+                "hour": req["hour"], "trace": trace.steps}, None, None, None, None
 
     for k in ("origin", "destination"):
         if req.get(k) not in PLACES:
@@ -622,16 +667,18 @@ def orchestrate(body):
     rejected += rejected2
     if not feasible:
         raise PlanError("No feasible trip under these limits — try relaxing walk distance or budget.")
-    picks, front, scores = ranker_agent(feasible, req["weights"], trace)
+    caps = {"max_walk_leg_mi": req["max_walk_leg_mi"], "max_total_walk_mi": req["max_total_walk_mi"]}
+    picks, front, scores, notice = ranker_agent(feasible, req["weights"], trace, req["mode"], caps)
     why = explainer_agent(picks, baseline_trip, trace, client)
 
     options = [{**t.to_dict(), "label": lbl, "why": why[t.id], "score": round(scores[t.id], 3)}
                for t, lbl in picks]
     return {
-        "request": {**{k: req[k] for k in ("origin", "destination", "hour", "event",
+        "request": {**{k: req[k] for k in ("origin", "destination", "hour", "event", "mode",
                                            "weights", "max_walk_leg_mi", "max_total_walk_mi",
                                            "avoid_steep", "max_cost", "weight_kg")},
                     "weather": weather_input},
+        "notice": notice,
         "live": {"weather": req["weather_detail"], "condition": req["weather"],
                  "transit": transit_source, "routes": routes_source,
                  "bikes": req.get("_bike_source", "not used"),
@@ -644,14 +691,14 @@ def orchestrate(body):
                   "llm": client is not None},
         "rejected": rejected[:12],
         "trace": trace.steps,
-    }, feasible, why, baseline_trip
+    }, feasible, why, baseline_trip, caps
 
 
-def rerank(feasible, weights, why_cache, baseline_trip):
-    """Slider moves re-run only the Ranker — no specialists, no LLM calls."""
+def rerank(feasible, weights, why_cache, baseline_trip, mode=None, caps=None):
+    """Mode switches and slider moves re-run only the Ranker — no specialists, no LLM calls."""
     trace = Trace()
-    picks, _, scores = ranker_agent(feasible, weights, trace)
+    picks, _, scores, notice = ranker_agent(feasible, weights, trace, mode, caps)
     options = [{**t.to_dict(), "label": lbl, "score": round(scores[t.id], 3),
                 "why": why_cache.get(t.id) or template_explanation(t, baseline_trip)}
                for t, lbl in picks]
-    return options, trace.steps
+    return options, trace.steps, notice

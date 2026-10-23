@@ -15,6 +15,27 @@ Open http://localhost:5080. With `ANTHROPIC_API_KEY` set, the Intent and Explain
 use Claude (`claude-haiku-5-5`); without it (or with `HOPPER_OFFLINE=1`) they fall back to
 a rule parser and templates. Every number is identical in both modes.
 
+## Modes
+
+Pick one at the top (or let the Intent agent infer it from your question):
+
+| Mode | Goal | Rules on top of the Critic |
+|---|---|---|
+| ⚡ **Hustle** | Fastest | Walk ≤ 0.4 mi per leg, ≤ 0.8 mi total; weights time 3 · cost 0.5 · health 0 |
+| 💸 **Broke** | Budget | Walk ≤ 1.5 mi per leg; ride-hail only if nothing else works; ≤ 2.5× the fastest trip |
+| 🍸 **Bar Crawl** | Hit cool bars | 21+ gate; 2–5 stops; walk-only hops (≤ 0.5 mi, ≤ 0.25 mi in rain); simulated ride home |
+| 🔥 **Burn** | Part transit / part workout | Must include a transit leg AND ≥ 40% active minutes; ≤ 2× the fastest *transit* trip |
+
+- Plans are built once with the loosest limits; switching Hustle / Broke / Burn re-runs only
+  the Ranker on cached trips (`/api/rerank` with `mode`). "Advanced" sliders = Custom mode.
+- If nothing meets a Mode's rules, the closest options are shown with a notice.
+- **Bar Crawl** (`/api/crawl`) uses OpenStreetMap bars — live from Overpass (cached 7 days),
+  falling back to the bundled snapshot `app/fixtures/sf_bars.json` (497 bars, © OpenStreetMap
+  contributors, ODbL). OSM has **no ratings**: the cool score uses landmark status
+  (Wikipedia/Wikidata), how thoroughly the bar is mapped, website / Instagram / hours,
+  outdoor seating, and your vibe (cocktail, craft beer, dive, wine, live music, sports,
+  LGBTQ+, landmarks). Opening hours are shown, not validated — check before you go.
+
 Tests: `python3 -m pytest -q tests` (no network — live feeds are tested with sample payloads)
 
 ## Live data (free, no Google)

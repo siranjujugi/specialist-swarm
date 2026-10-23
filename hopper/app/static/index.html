@@ -42,6 +42,26 @@
   .sliders h3, details summary { font-size: 13px; margin: 0 0 6px; font-weight: 650; }
   .slider { display: grid; grid-template-columns: 70px 1fr 28px; align-items: center; gap: 8px; }
   .slider input { width: 100%; accent-color: var(--accent); }
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0 14px; }
+  .mode { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 10px 4px;
+          border: 1px solid var(--line); border-radius: 14px; background: var(--bg); cursor: pointer;
+          text-align: center; min-height: 78px; }
+  .mode .ico { font-size: 22px; line-height: 1.1; }
+  .mode b { font-size: 13px; }
+  .mode small { font-size: 10.5px; color: var(--muted); line-height: 1.2; }
+  .mode.active { border-color: var(--accent); background: var(--chip); box-shadow: 0 0 0 1px var(--accent); }
+  .mode.active b { color: var(--accent); }
+  .vibes { display: flex; gap: 6px; flex-wrap: wrap; }
+  .vibes button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
+                  padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .vibes button.on { border-color: var(--accent); color: var(--accent); background: var(--chip); }
+  .notice { margin-top: 12px; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--warn);
+            color: var(--warn); font-size: 13px; }
+  .stop { display: grid; grid-template-columns: 26px 1fr; gap: 8px; margin-top: 10px; }
+  .stop .num { width: 24px; height: 24px; border-radius: 50%; background: #c026d3; color: #fff;
+               display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  .stop .t { font-size: 12px; color: var(--muted); }
+  .hop { margin: 4px 0 0 34px; font-size: 12px; color: var(--muted); }
   .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
   .presets button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
                     padding: 3px 10px; font-size: 12px; cursor: pointer; }
@@ -95,45 +115,69 @@
     <h1>Hop<span>per</span></h1>
     <div class="tag">Walk a bit. Ride a bit. Save money and get your steps in. San Francisco only.</div>
 
-    <label for="q">Ask in plain English</label>
-    <input id="q" type="text" placeholder="e.g. from Civic Center to Oracle Park at 6pm for the Giants game, cheap">
-    <div class="or">— or pick —</div>
-    <div class="row">
-      <div><label for="from">From</label><select id="from"></select></div>
-      <div><label for="to">To</label><select id="to"></select></div>
+    <div class="modes" id="modes" role="radiogroup" aria-label="Mode">
+      <button class="mode active" data-mode="hustle" role="radio" aria-checked="true"><span class="ico">⚡</span><b>Hustle</b><small>Fastest</small></button>
+      <button class="mode" data-mode="broke" role="radio" aria-checked="false"><span class="ico">💸</span><b>Broke</b><small>Budget</small></button>
+      <button class="mode" data-mode="barcrawl" role="radio" aria-checked="false"><span class="ico">🍸</span><b>Bar Crawl</b><small>Hit cool bars</small></button>
+      <button class="mode" data-mode="burn" role="radio" aria-checked="false"><span class="ico">🔥</span><b>Burn</b><small>Part transit / part workout</small></button>
     </div>
-    <div class="row row3">
-      <div><label for="hour">Leave at</label><select id="hour"></select></div>
-      <div><label for="weather">Weather</label>
-        <select id="weather"><option value="live">Live (NWS)</option><option value="clear">Clear</option><option value="fog">Fog</option><option value="rain">Rain</option></select></div>
-      <div><label for="budget">Budget $</label><input id="budget" type="number" min="0" placeholder="any"></div>
+
+    <div id="trip-form">
+      <label for="q">Ask in plain English</label>
+      <input id="q" type="text" placeholder="e.g. late for a meeting, Castro to Salesforce Tower">
+      <div class="or">— or pick —</div>
+      <div class="row">
+        <div><label for="from">From</label><select id="from"></select></div>
+        <div><label for="to">To</label><select id="to"></select></div>
+      </div>
+      <div class="row row3">
+        <div><label for="hour">Leave at</label><select id="hour"></select></div>
+        <div><label for="weather">Weather</label>
+          <select id="weather"><option value="live">Live (NWS)</option><option value="clear">Clear</option><option value="fog">Fog</option><option value="rain">Rain</option></select></div>
+        <div><label for="budget">Budget $</label><input id="budget" type="number" min="0" placeholder="any"></div>
+      </div>
+      <div class="toggles">
+        <label><input id="event" type="checkbox"> Game / event day</label>
+        <label><input id="steep" type="checkbox"> Avoid steep hills</label>
+      </div>
+      <button id="go" class="go">Plan my trip</button>
     </div>
-    <div class="toggles">
-      <label><input id="event" type="checkbox"> Game / event day</label>
-      <label><input id="steep" type="checkbox"> Avoid steep hills</label>
+
+    <div id="crawl-form" style="display:none">
+      <div class="row">
+        <div><label for="c-start">Start near</label><select id="c-start"></select></div>
+        <div><label for="c-end">Home (ride back)</label><select id="c-end"></select></div>
+      </div>
+      <div class="row row3">
+        <div><label for="c-hour">Start at</label><select id="c-hour"></select></div>
+        <div><label for="c-stops">Stops</label><select id="c-stops"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></div>
+        <div><label for="c-mins">Min / stop</label><select id="c-mins"><option>30</option><option selected>45</option><option>60</option><option>90</option></select></div>
+      </div>
+      <label style="margin-top:10px">Vibe</label>
+      <div class="vibes" id="vibes"></div>
+      <div class="toggles">
+        <label><input id="c-age" type="checkbox"> I'm 21 or older</label>
+      </div>
+      <button id="c-go" class="go">Plan my crawl</button>
+      <div class="meta">Bars from OpenStreetMap. OSM has no ratings — the cool score uses landmark status, how well a bar is mapped, website/hours, and your vibe. Drink responsibly. Never drive.</div>
     </div>
-    <button id="go" class="go">Plan my trip</button>
     <div id="error" class="error"></div>
 
-    <div class="sliders">
-      <h3>What matters most? <span style="font-weight:400;color:var(--muted)">(re-ranks instantly)</span></h3>
-      <div class="slider"><span>⏱ Time</span><input id="w-time" type="range" min="0" max="3" step="0.5" value="1"><b id="v-time">1</b></div>
-      <div class="slider"><span>💵 Cost</span><input id="w-cost" type="range" min="0" max="3" step="0.5" value="1"><b id="v-cost">1</b></div>
-      <div class="slider"><span>💚 Health</span><input id="w-health" type="range" min="0" max="3" step="0.5" value="1"><b id="v-health">1</b></div>
-      <div class="presets">
-        <button data-w="3,0.5,0.5">Fastest</button><button data-w="0.5,3,0.5">Cheapest</button>
-        <button data-w="0.5,0.5,3">Healthiest</button><button data-w="1,1,1">Balanced</button>
+    <details id="advanced">
+      <summary>Advanced: custom weights &amp; profile</summary>
+      <div class="sliders">
+        <div class="slider"><span>⏱ Time</span><input id="w-time" type="range" min="0" max="3" step="0.5" value="3"><b id="v-time">3</b></div>
+        <div class="slider"><span>💵 Cost</span><input id="w-cost" type="range" min="0" max="3" step="0.5" value="0.5"><b id="v-cost">0.5</b></div>
+        <div class="slider"><span>💚 Health</span><input id="w-health" type="range" min="0" max="3" step="0.5" value="0"><b id="v-health">0</b></div>
+        <div class="meta" style="margin-top:4px">Moving a slider switches to Custom mode.</div>
       </div>
-    </div>
-
-    <details>
-      <summary>Profile &amp; walking limits</summary>
       <div class="row row3">
         <div><label for="kg">Weight (kg)</label><input id="kg" type="number" value="75" min="30" max="200"></div>
-        <div><label for="leg">Max walk / leg (mi)</label><input id="leg" type="number" value="1.5" step="0.1" min="0.1"></div>
-        <div><label for="total">Max walk total (mi)</label><input id="total" type="number" value="2.5" step="0.1" min="0.1"></div>
+        <div><label for="leg">Max walk / leg (mi)</label><input id="leg" type="number" value="2.0" step="0.1" min="0.1"></div>
+        <div><label for="total">Max walk total (mi)</label><input id="total" type="number" value="3.0" step="0.1" min="0.1"></div>
       </div>
     </details>
+    <div id="notice" class="notice" style="display:none"></div>
 
     <div id="wx" class="wx" style="display:none"></div>
     <div id="sources" class="sources"></div>
@@ -162,6 +206,8 @@
 const $ = (id) => document.getElementById(id);
 const MODE_NAMES = { walk: "Walk", ride: "Ride", muni: "Muni", bart: "BART", cable: "Cable car", bike: "Bike", ebike: "E-bike" };
 let COLORS = {}, PLACES = [], plan = null, options = [], active = 0, layer = null, rerankTimer = null;
+let mode = "hustle", vibe = "any";
+const MODE_WEIGHTS = { hustle: [3, 0.5, 0], broke: [0.5, 3, 0.5], burn: [0.5, 0.5, 3] };
 
 const map = L.map("map", { zoomControl: true }).setView([37.773, -122.431], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -183,6 +229,43 @@ async function init() {
   $("hour").value = +new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", hourCycle: "h23" }).format(new Date());
   $("legend").innerHTML = Object.entries(COLORS).map(([m, c]) =>
     `<span><i class="dot" style="background:${c};margin:0"></i>${MODE_NAMES[m]}</span>`).join("");
+  // Bar Crawl form
+  const opts = PLACES.map(p => `<option value="${p.key}">${esc(p.name)}</option>`).join("");
+  $("c-start").innerHTML = opts; $("c-start").value = "washington_sq";
+  $("c-end").innerHTML = `<option value="">— no ride home —</option>` + opts; $("c-end").value = "hayes_valley";
+  $("c-hour").innerHTML = $("hour").innerHTML; $("c-hour").value = 20;
+  $("vibes").innerHTML = Object.entries(r.vibes).map(([k, label]) =>
+    `<button data-vibe="${k}" class="${k === vibe ? "on" : ""}">${esc(label)}</button>`).join("");
+}
+
+function setMode(m, { rerank = true } = {}) {
+  mode = m;
+  document.querySelectorAll(".mode").forEach(b => {
+    const on = b.dataset.mode === m;
+    b.classList.toggle("active", on); b.setAttribute("aria-checked", on);
+  });
+  const crawl = m === "barcrawl";
+  $("trip-form").style.display = crawl ? "none" : "";
+  $("crawl-form").style.display = crawl ? "" : "none";
+  $("error").textContent = "";
+  if (MODE_WEIGHTS[m]) {
+    const [t, c, h] = MODE_WEIGHTS[m];
+    $("w-time").value = t; $("w-cost").value = c; $("w-health").value = h;
+    for (const k of ["time", "cost", "health"]) $("v-" + k).textContent = $("w-" + k).value;
+  }
+  if (crawl) { clearResults(); return; }
+  if (rerank && plan) rerankNow();
+}
+
+function clearResults() {
+  for (const id of ["results", "meta", "sources"]) $(id).innerHTML = "";
+  for (const id of ["wx", "notice", "trace-box", "rej-box"]) $(id).style.display = "none";
+  if (layer) { map.removeLayer(layer); layer = null; }
+}
+
+function showNotice(text) {
+  $("notice").style.display = text ? "block" : "none";
+  $("notice").textContent = text || "";
 }
 
 async function planTrip() {
@@ -192,19 +275,29 @@ async function planTrip() {
     hour: +$("hour").value, weather: $("weather").value, event: $("event").checked,
     avoid_steep: $("steep").checked, weight_kg: +$("kg").value,
     max_walk_leg_mi: +$("leg").value, max_total_walk_mi: +$("total").value,
-    max_cost: $("budget").value === "" ? null : +$("budget").value, weights: weights(),
+    max_cost: $("budget").value === "" ? null : +$("budget").value, mode, weights: weights(),
   };
   try {
     const res = await fetch("api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Something went wrong");
+    if (data.redirect === "barcrawl") {
+      // The Intent agent heard "bars" — hand over to the crawl planner (21+ gate).
+      setMode("barcrawl");
+      if (data.start) $("c-start").value = data.start;
+      if (data.end) $("c-end").value = data.end;
+      $("c-hour").value = data.hour;
+      showNotice("Sounds like a night out 🍸 — confirm you're 21+, pick a vibe, and plan your crawl.");
+      return;
+    }
     plan = data; options = data.options; active = 0;
     // Reflect what the Intent agent understood back into the form.
     const rq = data.request;
     $("from").value = rq.origin; $("to").value = rq.destination; $("hour").value = rq.hour;
     $("weather").value = rq.weather; $("event").checked = rq.event; $("steep").checked = rq.avoid_steep;
     if (rq.max_cost != null) $("budget").value = rq.max_cost;
-    for (const k of ["time", "cost", "health"]) { $("w-" + k).value = rq.weights[k]; $("v-" + k).textContent = rq.weights[k]; }
+    if (rq.mode && rq.mode !== mode && MODE_WEIGHTS[rq.mode]) setMode(rq.mode, { rerank: false });
+    showNotice(data.notice);
     renderAll();
   } catch (e) {
     $("error").textContent = e.message;
@@ -216,10 +309,70 @@ async function planTrip() {
 async function rerankNow() {
   if (!plan) return;
   const res = await fetch("api/rerank", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ plan_id: plan.plan_id, weights: weights() }) });
+    body: JSON.stringify({ plan_id: plan.plan_id, mode, weights: weights() }) });
   const data = await res.json();
   if (!res.ok) { $("error").textContent = data.error; return; }
-  options = data.options; active = 0; renderResults(); drawTrip();
+  options = data.options; active = 0; showNotice(data.notice); renderResults(); drawTrip();
+}
+
+async function planCrawl() {
+  $("error").textContent = "";
+  if (!$("c-age").checked) { $("error").textContent = "Bar Crawl is 21+. Please confirm your age."; return; }
+  $("c-go").disabled = true; $("c-go").textContent = "Scouting bars…";
+  const body = { start: $("c-start").value, end: $("c-end").value, hour: +$("c-hour").value,
+    stops: +$("c-stops").value, minutes_per_stop: +$("c-mins").value, vibe,
+    weather: $("weather").value, event: $("event").checked, weight_kg: +$("kg").value, age_confirmed: true };
+  try {
+    const res = await fetch("api/crawl", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Something went wrong");
+    renderCrawl(data);
+  } catch (e) {
+    clearResults(); $("error").textContent = e.message;
+  } finally {
+    $("c-go").disabled = false; $("c-go").textContent = "Plan my crawl";
+  }
+}
+
+function renderCrawl(d) {
+  clearResults(); showNotice("");
+  const it = d.itinerary, tot = it.totals;
+  const w = d.weather;
+  $("wx").style.display = "block";
+  $("wx").innerHTML = w ? `${{ rain: "🌧", fog: "🌫" }[d.condition] || "☀️"} <b>${w.temp_f}°F</b> ${esc(w.summary)} · wind ${w.wind_mph} mph · rain ${w.precip_pct}%`
+    : `Weather: <b>${esc(d.condition)}</b>`;
+  $("sources").innerHTML = `<span class="on">Bars: ${esc(d.source)}</span><span class="on">${d.bars_considered} bars considered</span><span>hops ≤ ${d.hop_limit_mi} mi</span>`;
+  $("meta").innerHTML = `<b>🍸 ${it.stops.length}-stop crawl from ${esc(d.start_name)}</b> · ${tot.minutes} min · ends ${esc(tot.ends)} ·
+    ${tot.walk_mi} mi walked · ${tot.steps.toLocaleString()} steps${it.ride_home ? ` · ride home $${it.ride_home.cost.toFixed(2)}` : ""}`;
+  let html = `<div class="card active">`;
+  it.stops.forEach((s, i) => {
+    const hop = it.walks[i];
+    html += `<div class="hop">🚶 ${hop.distance_mi} mi · ${Math.round(hop.minutes)} min walk</div>
+      <div class="stop"><div class="num">${i + 1}</div><div>
+        <b>${esc(s.name)}</b> <span class="t">${esc(s.arrive)} – ${esc(s.leave)}</span>
+        <div class="t">${esc(s.why)}</div>
+        <div class="t">🕑 ${esc(s.hours)}${/^https?:\/\//i.test(s.website) ? ` · <a href="${esc(s.website)}" target="_blank" rel="noopener noreferrer">website</a>` : ""}</div>
+      </div></div>`;
+  });
+  if (it.ride_home) {
+    const r = it.ride_home;
+    html += `<div class="hop">🚗 Ride home to <b>${esc(r.to_name)}</b> · ${r.distance_mi} mi · ${Math.round(r.minutes)} min + ${r.wait_min} wait · $${r.cost.toFixed(2)} <i>(simulated)</i></div>`;
+  }
+  if (it.notes.length) html += `<div class="flags">${it.notes.map(n => `<span>${esc(n)}</span>`).join("")}</div>`;
+  if (d.alternate.length) html += `<div class="why">Alternate crawl: ${d.alternate.map(a => esc(a.name)).join(" → ")}</div>`;
+  html += `<div class="meta">Drink responsibly. Never drive — the ride home is part of the plan.</div></div>`;
+  $("results").innerHTML = html;
+  // Map: walking hops, numbered pins, ride home.
+  map.invalidateSize();
+  layer = L.featureGroup().addTo(map);
+  for (const h of it.walks) L.polyline(h.path, { color: COLORS.walk, weight: 4, dashArray: "2 8" }).addTo(layer);
+  if (it.ride_home) L.polyline(it.ride_home.path, { color: COLORS.ride, weight: 5, opacity: 0.8 }).bindTooltip("Ride home (simulated)").addTo(layer);
+  it.stops.forEach((s, i) => L.marker([s.lat, s.lon], { icon: L.divIcon({ className: "",
+    html: `<div class="stop"><div class="num">${i + 1}</div></div>`, iconSize: [24, 24], iconAnchor: [12, 12] }) })
+    .bindTooltip(`${i + 1}. ${s.name} · ${s.arrive}`).addTo(layer));
+  const start = it.walks[0].path[0];
+  L.circleMarker(start, { radius: 8, color: "#fff", weight: 2, fillColor: "#16a34a", fillOpacity: 1 }).bindTooltip(d.start_name).addTo(layer);
+  map.fitBounds(layer.getBounds(), { padding: [40, 40] });
 }
 
 function renderAll() {
@@ -318,15 +471,22 @@ $("q").addEventListener("keydown", e => { if (e.key === "Enter") planTrip(); });
 for (const k of ["time", "cost", "health"]) {
   $("w-" + k).addEventListener("input", () => {
     $("v-" + k).textContent = $("w-" + k).value;
+    // Hand-tuned weights = Custom mode: no Mode button stays highlighted.
+    if (mode !== "barcrawl") {
+      mode = "custom";
+      document.querySelectorAll(".mode").forEach(b => { b.classList.remove("active"); b.setAttribute("aria-checked", false); });
+    }
     clearTimeout(rerankTimer); rerankTimer = setTimeout(rerankNow, 150);
   });
 }
-document.querySelectorAll(".presets button").forEach(b => b.onclick = () => {
-  const [t, c, h] = b.dataset.w.split(",");
-  $("w-time").value = t; $("w-cost").value = c; $("w-health").value = h;
-  for (const k of ["time", "cost", "health"]) $("v-" + k).textContent = $("w-" + k).value;
-  rerankNow();
+document.querySelectorAll(".mode").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+$("vibes").addEventListener("click", e => {
+  const b = e.target.closest("[data-vibe]");
+  if (!b) return;
+  vibe = b.dataset.vibe;
+  document.querySelectorAll("#vibes button").forEach(x => x.classList.toggle("on", x === b));
 });
+$("c-go").onclick = planCrawl;
 $("results").addEventListener("click", e => {
   const bk = e.target.closest("[data-book]");
   if (bk) { book(+bk.dataset.book); return; }

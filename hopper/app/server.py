@@ -1,4 +1,5 @@
-"""Hopper Flask server: /api/plan runs the swarm, /api/rerank re-runs only the Ranker."""
+"""Hopper Flask server: /api/plan runs the swarm, /api/rerank re-runs only the Ranker,
+/api/crawl plans a Bar Crawl."""
 import os
 import uuid
 from collections import OrderedDict
@@ -19,12 +20,15 @@ def load_dotenv(path=Path(__file__).resolve().parent.parent / ".env"):
 
 load_dotenv()
 
-from .agents import PlanError, orchestrate, rerank  # noqa: E402 — needs env loaded first
-from .data import MODE_COLORS, PLACES
+from . import bars, tools, weather  # noqa: E402 — needs env loaded first
+from .agents import PlanError, orchestrate, rerank, sf_hour  # noqa: E402
+from .data import MODE_COLORS, PLACES  # noqa: E402
+from .live import FeedError  # noqa: E402
+from .modes import MODES  # noqa: E402
 
 STATIC = Path(__file__).parent / "static"
 app = Flask(__name__, static_folder=str(STATIC))
-PLANS = OrderedDict()   # plan_id → (feasible trips, explanations, baseline); small LRU
+PLANS = OrderedDict()   # plan_id → (feasible trips, explanations, baseline, caps); small LRU
 
 
 @app.get("/")
@@ -36,17 +40,21 @@ def index():
 def places():
     return jsonify({"places": [{"key": k, "name": v[0], "lat": v[1], "lon": v[2], "elev_ft": v[3]}
                                for k, v in sorted(PLACES.items(), key=lambda kv: kv[1][0])],
-                    "colors": MODE_COLORS})
+                    "colors": MODE_COLORS,
+                    "modes": {k: {"label": m["label"], "goal": m["goal"]} for k, m in MODES.items()},
+                    "vibes": bars.VIBES})
 
 
 @app.post("/api/plan")
 def plan():
     try:
-        result, feasible, why, baseline = orchestrate(request.get_json(force=True) or {})
+        result, feasible, why, baseline, caps = orchestrate(request.get_json(force=True) or {})
     except PlanError as e:
         return jsonify({"error": str(e)}), 422
+    if result.get("redirect"):
+        return jsonify(result)
     plan_id = uuid.uuid4().hex[:10]
-    PLANS[plan_id] = (feasible, why, baseline)
+    PLANS[plan_id] = (feasible, why, baseline, caps)
     while len(PLANS) > 50:
         PLANS.popitem(last=False)
     return jsonify({**result, "plan_id": plan_id})
@@ -58,9 +66,41 @@ def rerank_plan():
     cached = PLANS.get(body.get("plan_id"))
     if not cached:
         return jsonify({"error": "Plan expired — search again."}), 404
-    feasible, why, baseline = cached
-    options, trace = rerank(feasible, body.get("weights") or {}, why, baseline)
-    return jsonify({"options": options, "trace": trace})
+    feasible, why, baseline, caps = cached
+    mode = body.get("mode")
+    options, trace, notice = rerank(feasible, body.get("weights") or {}, why, baseline,
+                                    None if mode == "custom" else mode, caps)
+    return jsonify({"options": options, "trace": trace, "notice": notice})
+
+
+@app.post("/api/crawl")
+def crawl():
+    body = request.get_json(force=True) or {}
+    if body.get("age_confirmed") is not True:
+        return jsonify({"error": "Bar Crawl is 21+. Please confirm your age."}), 403
+    start, end = body.get("start"), body.get("end") or None
+    if start not in PLACES or (end and end not in PLACES):
+        return jsonify({"error": "Pick a start (and optional end) from the list."}), 422
+    stops = max(2, min(int(body.get("stops") or 3), 5))
+    vibe = body.get("vibe") if body.get("vibe") in bars.VIBES else "any"
+    hour = int(body.get("hour", sf_hour())) % 24
+    per_stop = max(20, min(int(body.get("minutes_per_stop") or 45), 120))
+    condition, wx = body.get("weather") or "live", None
+    if condition == "live":
+        try:
+            wx = weather.at(*tools.latlon(start), hour)
+            condition = wx["condition"]
+        except FeedError:
+            condition = "clear"
+    out, source = bars.plan_crawl(start, end, stops, vibe, hour, per_stop, condition,
+                                  bool(body.get("event")), float(body.get("weight_kg") or 75))
+    if not out:
+        return jsonify({"error": f"No {bars.VIBES[vibe].lower()} crawl of {stops} bars within walking "
+                                 f"distance of {tools.name(start)} — try another vibe, fewer stops, "
+                                 "or a busier neighborhood (North Beach, Mission, Castro)."}), 422
+    return jsonify({**out, "start_name": tools.name(start),
+                    "end_name": tools.name(end) if end else None,
+                    "weather": wx, "condition": condition, "vibe": vibe, "stops_requested": stops})
 
 
 if __name__ == "__main__":

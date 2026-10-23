@@ -102,7 +102,12 @@ def elev_ft(key):
 
 
 def haversine_mi(a, b):
-    (lat1, lon1), (lat2, lon2) = latlon(a), latlon(b)
+    return haversine_pts(latlon(a), latlon(b))
+
+
+def haversine_pts(p, q):
+    """Great-circle miles between two [lat, lon] points."""
+    (lat1, lon1), (lat2, lon2) = p, q
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dp, dl = p2 - p1, math.radians(lon2 - lon1)
     h = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
@@ -159,12 +164,23 @@ def walk_leg(a, b, weight_kg=75, dist=None, path=None, source="walk_leg"):
 
 
 def surge_at(key, hour, event):
+    return surge_at_point(latlon(key), hour, event)
+
+
+def surge_at_point(point, hour, event):
     mult, zone = 1.0, ""
     for center, radius, m, hours, needs_event in SURGE_ZONES:
-        if hour in hours and (event or not needs_event) and haversine_mi(key, center) <= radius:
+        if hour in hours and (event or not needs_event) and \
+                haversine_pts(point, latlon(center)) <= radius:
             if m > mult:
                 mult, zone = m, center
     return mult, zone
+
+
+def ride_fare(dist, minutes, mult):
+    """SIMULATED fare: base + distance + time, × surge, floored at the minimum, + booking fee."""
+    fare = RIDE["base"] + RIDE["per_mile"] * dist + RIDE["per_min"] * minutes
+    return round(max(fare * mult, RIDE["min_fare"]) + RIDE["booking_fee"], 2)
 
 
 def drive_minutes(dist_mi, hour):
@@ -186,11 +202,9 @@ def ride_leg(a, b, hour=12, event=False, dist=None, free_flow_min=None, path=Non
     minutes = free_flow_min * traffic_factor(hour) if free_flow_min is not None \
         else drive_minutes(dist, hour)
     mult, _ = surge_at(a, hour, event)
-    fare = RIDE["base"] + RIDE["per_mile"] * dist + RIDE["per_min"] * minutes
-    fare = max(fare * mult, RIDE["min_fare"]) + RIDE["booking_fee"]
     wait = RIDE["pickup_wait_min"] + (3 if mult > 1 else 0)
     return Leg("ride", a, b, round(dist, 2), round(minutes, 1), wait_min=wait,
-               cost=round(fare, 2), surge=mult, path=path or [latlon(a), latlon(b)],
+               cost=ride_fare(dist, minutes, mult), surge=mult, path=path or [latlon(a), latlon(b)],
                source=source)
 
 
