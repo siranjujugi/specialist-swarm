@@ -1,8 +1,8 @@
-"""Run a task with the configured coordinator and stream session events.
+"""Request a specialist route and stream the coordinator session.
 
 Usage:
-    python run_swarm.py "Describe the task for the swarm"
-    python run_swarm.py "Task instructions" --context path/to/context.txt
+    python run_swarm.py "Ferry Building" "Golden Gate Park" \\
+        --specialist scenic_route
 """
 
 import argparse
@@ -13,15 +13,35 @@ from anthropic import Anthropic
 
 
 OUTPUT_DIR = Path("outputs")
+SPECIALIST_CHOICES = (
+    "fitness_coach",
+    "scenic_route",
+    "traffic_avoider",
+    "cost_effective",
+    "bar_crawl",
+)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run a task with the specialist swarm.")
-    parser.add_argument("task", help="Instructions describing the task for the swarm.")
+    parser = argparse.ArgumentParser(
+        description="Plan a 5:00 PM San Francisco route with one specialist."
+    )
+    parser.add_argument("origin", help="Starting location in the San Francisco area.")
+    parser.add_argument("destination", help="Destination in the San Francisco area.")
+    parser.add_argument(
+        "--specialist",
+        required=True,
+        choices=SPECIALIST_CHOICES,
+        help="Route objective to optimize.",
+    )
+    parser.add_argument(
+        "--constraints",
+        help="Optional needs such as accessibility, transport mode, or time limit.",
+    )
     parser.add_argument(
         "--context",
         type=Path,
-        help="Optional text file to include as task context.",
+        help="Optional text file containing additional route context.",
     )
     return parser.parse_args()
 
@@ -40,7 +60,16 @@ def main() -> None:
             "create_coordinator.py first."
         )
 
-    task = args.task
+    task_lines = [
+        "Plan this route:",
+        f"Origin: {args.origin}",
+        f"Destination: {args.destination}",
+        f"Selected specialist: {args.specialist}",
+        "Departure: 5:00 PM America/Los_Angeles",
+    ]
+    if args.constraints:
+        task_lines.append(f"User constraints: {args.constraints}")
+    task = "\n".join(task_lines)
     if args.context:
         task += f"\n\n===== CONTEXT: {args.context.name} =====\n{args.context.read_text()}"
 
@@ -52,7 +81,7 @@ def main() -> None:
     session = client.beta.sessions.create(
         agent=coordinator_id,
         environment_id=environment_id,
-        title=f"Swarm session: {args.task[:60]}",
+        title=f"{args.specialist}: {args.origin[:24]} to {args.destination[:24]}",
     )
     Path(".last_session_id").write_text(session.id)
 

@@ -17,19 +17,50 @@ from pathlib import Path
 from anthropic import Anthropic
 
 
+EXPECTED_SPECIALISTS = {
+    "fitness_coach",
+    "scenic_route",
+    "traffic_avoider",
+    "cost_effective",
+    "bar_crawl",
+}
+
+
 COORDINATOR_SYSTEM = """\
-You are a coordinator agent. Your job is to understand the user's task,
-delegate well-scoped parts of it to the available specialists, and assemble
-their contributions into a coherent, useful result.
+You are the dispatcher for a San Francisco route-planning demo. Every request
+contains an origin, a destination, a selected specialist, and a 5:00 PM local
+departure time. Supported specialist keys are:
 
-Decide which specialists are relevant and whether their work can happen in
-parallel. Give each specialist the task context, a clear request, and the
-expected shape of its response. Avoid asking multiple specialists to do the
-same work unless independent perspectives are useful.
+- fitness_coach: an active walking, running, or cycling route;
+- scenic_route: a route emphasizing views, parks, and landmarks;
+- traffic_avoider: a reliable route that avoids 5:00 PM congestion;
+- cost_effective: the lowest practical door-to-door cost;
+- bar_crawl: a responsible, walking/transit/rideshare crawl for adults.
 
-Review the responses for consistency, address important gaps with follow-up
-delegation when needed, and return the completed result in the format requested
-by the user. Be clear about assumptions or unresolved limitations.
+Validate that the origin, destination, and specialist are present. Treat the
+San Francisco / SFO area as the service area. If a location is ambiguous or
+apparently unsupported, explain the issue and request only the missing detail.
+
+For a valid request, delegate to exactly the selected specialist. Include the
+origin, destination, fixed departure time, and all user constraints verbatim.
+Do not ask other specialists for competing routes and do not silently replace
+the selected objective. You may follow up with the selected specialist once if
+its answer omits a required route element or violates a safety constraint.
+
+Return the specialist's recommendation in this compact format:
+
+Route style: <human-readable specialist name>
+Summary: <one sentence>
+Route:
+1. <ordered leg>
+2. <ordered leg>
+Totals: <estimated duration, distance, and cost as applicable>
+Why this fits: <brief explanation>
+Before leaving: <live-data, safety, accessibility, or hours checks>
+
+Preserve uncertainty labels. Never imply access to live traffic, transit,
+closure, price, weather, or venue-hours data unless the specialist cites a
+current source. This is route guidance, not turn-by-turn navigation.
 """
 
 
@@ -42,6 +73,15 @@ def main() -> None:
     if not specialist_ids_path.exists():
         raise SystemExit("Run create_specialists.py first.")
     specialist_ids = json.loads(specialist_ids_path.read_text())
+    configured_specialists = set(specialist_ids)
+    if configured_specialists != EXPECTED_SPECIALISTS:
+        missing = sorted(EXPECTED_SPECIALISTS - configured_specialists)
+        unexpected = sorted(configured_specialists - EXPECTED_SPECIALISTS)
+        raise SystemExit(
+            "Specialist IDs do not match the route roster. Run "
+            f"create_specialists.py again. Missing: {missing}; "
+            f"unexpected: {unexpected}."
+        )
 
     client = Anthropic(
         api_key=api_key,
@@ -49,7 +89,7 @@ def main() -> None:
     )
 
     coordinator = client.beta.agents.create(
-        name="Swarm Coordinator",
+        name="San Francisco Route Dispatcher",
         model="claude-opus-4-7",
         system=COORDINATOR_SYSTEM,
         tools=[{"type": "agent_toolset_20260401"}],
@@ -60,7 +100,7 @@ def main() -> None:
                 for agent_id in specialist_ids.values()
             ],
         },
-        metadata={"role": "coordinator"},
+        metadata={"role": "route_dispatcher"},
     )
 
     Path(".coordinator_id").write_text(coordinator.id)
