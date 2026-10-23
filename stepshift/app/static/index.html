@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StepShift</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+  :root {
+    --bg: #f6f7f4; --panel: #ffffff; --ink: #14181f; --muted: #5d6573; --line: #e3e6e1;
+    --accent: #16a34a; --accent-ink: #ffffff; --chip: #eef6f0; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1311; --panel: #171c19; --ink: #e9ede9; --muted: #9aa49c; --line: #2a322d;
+            --accent: #22c55e; --accent-ink: #0b1a10; --chip: #1d2a22; --warn: #f59e0b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--ink); }
+  .app { display: grid; grid-template-columns: 440px 1fr; height: 100vh; }
+  aside { overflow-y: auto; padding: 18px 18px 40px; border-right: 1px solid var(--line);
+          background: var(--panel); }
+  #map { height: 100%; }
+  h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+  h1 span { color: var(--accent); }
+  .tag { color: var(--muted); margin: 2px 0 14px; }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type=text], select, input[type=number] {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--bg); }
+  .row { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; margin-top: 8px; }
+  .row3 { grid-template-columns: 1fr 1fr 1fr; }
+  .or { text-align: center; color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .toggles { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
+  .toggles label { display: flex; gap: 6px; align-items: center; color: var(--ink); font-size: 14px; margin: 0; }
+  .go { width: 100%; margin-top: 12px; padding: 11px; border: 0; border-radius: 12px;
+        background: var(--accent); color: var(--accent-ink); font-weight: 650; cursor: pointer; }
+  .go:disabled { opacity: .6; cursor: wait; }
+  .sliders { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+  .sliders h3, details summary { font-size: 13px; margin: 0 0 6px; font-weight: 650; }
+  .slider { display: grid; grid-template-columns: 70px 1fr 28px; align-items: center; gap: 8px; }
+  .slider input { width: 100%; accent-color: var(--accent); }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .presets button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
+                    padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  details { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  details summary { cursor: pointer; margin: 0; }
+  .error { margin-top: 12px; color: var(--warn); font-weight: 550; }
+  .wx { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: var(--chip); font-size: 14px; }
+  .wx b { font-size: 16px; }
+  .sources { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .sources span { font-size: 11px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); }
+  .sources .on { border-color: var(--accent); color: var(--accent); }
+  .sources .off { color: var(--muted); }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 14px; }
+  .card { margin-top: 10px; border: 1px solid var(--line); border-radius: 14px; padding: 12px;
+          cursor: pointer; background: var(--panel); transition: border-color .15s; }
+  .card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .label { font-size: 12px; font-weight: 650; background: var(--chip); color: var(--accent);
+           padding: 2px 8px; border-radius: 999px; }
+  .cost { font-weight: 700; font-size: 18px; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 8px 0; }
+  .metrics div { font-size: 11px; color: var(--muted); }
+  .metrics b { display: block; font-size: 15px; color: var(--ink); }
+  .strip { display: flex; height: 10px; border-radius: 6px; overflow: hidden; gap: 2px; }
+  .legs { margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; }
+  .legs li { display: flex; gap: 8px; padding: 2px 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex: none; }
+  .why { margin-top: 8px; font-size: 13px; color: var(--muted); font-style: italic; }
+  .flags { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .flags span { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
+  .book { margin-top: 10px; border: 1px solid var(--accent); color: var(--accent); background: transparent;
+          border-radius: 10px; padding: 6px 12px; cursor: pointer; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  td, th { text-align: left; padding: 4px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 10px; }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .modal { position: fixed; inset: 0; background: rgb(0 0 0 / .45); display: none;
+           align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
+  .modal.open { display: flex; }
+  .modal > div { background: var(--panel); border-radius: 16px; padding: 20px; max-width: 380px; width: 100%; }
+  @media (max-width: 820px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 45vh; height: auto; }
+    aside { border-right: 0; padding: 16px; order: 1; }
+    #map { order: 0; height: 45vh; position: sticky; top: 0; z-index: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>Step<span>Shift</span></h1>
+    <div class="tag">Walk a bit. Ride a bit. Save money and get your steps in. San Francisco only.</div>
+
+    <label for="q">Ask in plain English</label>
+    <input id="q" type="text" placeholder="e.g. from Civic Center to Oracle Park at 6pm for the Giants game, cheap">
+    <div class="or">— or pick —</div>
+    <div class="row">
+      <div><label for="from">From</label><select id="from"></select></div>
+      <div><label for="to">To</label><select id="to"></select></div>
+    </div>
+    <div class="row row3">
+      <div><label for="hour">Leave at</label><select id="hour"></select></div>
+      <div><label for="weather">Weather</label>
+        <select id="weather"><option value="live">Live (NWS)</option><option value="clear">Clear</option><option value="fog">Fog</option><option value="rain">Rain</option></select></div>
+      <div><label for="budget">Budget $</label><input id="budget" type="number" min="0" placeholder="any"></div>
+    </div>
+    <div class="toggles">
+      <label><input id="event" type="checkbox"> Game / event day</label>
+      <label><input id="steep" type="checkbox"> Avoid steep hills</label>
+    </div>
+    <button id="go" class="go">Plan my trip</button>
+    <div id="error" class="error"></div>
+
+    <div class="sliders">
+      <h3>What matters most? <span style="font-weight:400;color:var(--muted)">(re-ranks instantly)</span></h3>
+      <div class="slider"><span>⏱ Time</span><input id="w-time" type="range" min="0" max="3" step="0.5" value="1"><b id="v-time">1</b></div>
+      <div class="slider"><span>💵 Cost</span><input id="w-cost" type="range" min="0" max="3" step="0.5" value="1"><b id="v-cost">1</b></div>
+      <div class="slider"><span>💚 Health</span><input id="w-health" type="range" min="0" max="3" step="0.5" value="1"><b id="v-health">1</b></div>
+      <div class="presets">
+        <button data-w="3,0.5,0.5">Fastest</button><button data-w="0.5,3,0.5">Cheapest</button>
+        <button data-w="0.5,0.5,3">Healthiest</button><button data-w="1,1,1">Balanced</button>
+      </div>
+    </div>
+
+    <details>
+      <summary>Profile &amp; walking limits</summary>
+      <div class="row row3">
+        <div><label for="kg">Weight (kg)</label><input id="kg" type="number" value="75" min="30" max="200"></div>
+        <div><label for="leg">Max walk / leg (mi)</label><input id="leg" type="number" value="1.5" step="0.1" min="0.1"></div>
+        <div><label for="total">Max walk total (mi)</label><input id="total" type="number" value="2.5" step="0.1" min="0.1"></div>
+      </div>
+    </details>
+
+    <div id="wx" class="wx" style="display:none"></div>
+    <div id="sources" class="sources"></div>
+    <div id="meta" class="meta"></div>
+    <div id="results"></div>
+
+    <details id="trace-box" style="display:none">
+      <summary>Agent swarm trace</summary>
+      <div id="trace"></div>
+    </details>
+    <details id="rej-box" style="display:none">
+      <summary>Rejected by the Critic</summary>
+      <div id="rejected"></div>
+    </details>
+    <div class="legend" id="legend"></div>
+    <div class="meta">Ride prices are <b>simulated estimates</b>, not real Uber/Lyft quotes. Transit and bike fares are approximate. Calories are estimates. Booking is a mock.</div>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<div class="modal" id="modal"><div id="modal-body"></div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const MODE_NAMES = { walk: "Walk", ride: "Ride", muni: "Muni", bart: "BART", cable: "Cable car", bike: "Bike", ebike: "E-bike" };
+let COLORS = {}, PLACES = [], plan = null, options = [], active = 0, layer = null, rerankTimer = null;
+
+const map = L.map("map", { zoomControl: true }).setView([37.773, -122.431], 13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function hourLabel(h) { return h === 0 ? "12 am" : h < 12 ? `${h} am` : h === 12 ? "12 pm" : `${h - 12} pm`; }
+function weights() { return { time: +$("w-time").value, cost: +$("w-cost").value, health: +$("w-health").value }; }
+
+async function init() {
+  const r = await fetch("api/places").then(r => r.json());
+  PLACES = r.places; COLORS = r.colors;
+  for (const sel of [$("from"), $("to")]) {
+    sel.innerHTML = PLACES.map(p => `<option value="${p.key}">${esc(p.name)}</option>`).join("");
+  }
+  $("from").value = "ferry_building"; $("to").value = "coit_tower";
+  $("hour").innerHTML = [...Array(24).keys()].map(h => `<option value="${h}">${hourLabel(h)}</option>`).join("");
+  // Default to "now" in San Francisco, whatever the viewer's own time zone is.
+  $("hour").value = +new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", hourCycle: "h23" }).format(new Date());
+  $("legend").innerHTML = Object.entries(COLORS).map(([m, c]) =>
+    `<span><i class="dot" style="background:${c};margin:0"></i>${MODE_NAMES[m]}</span>`).join("");
+}
+
+async function planTrip() {
+  $("error").textContent = ""; $("go").disabled = true; $("go").textContent = "Asking the swarm…";
+  const body = {
+    query: $("q").value, origin: $("from").value, destination: $("to").value,
+    hour: +$("hour").value, weather: $("weather").value, event: $("event").checked,
+    avoid_steep: $("steep").checked, weight_kg: +$("kg").value,
+    max_walk_leg_mi: +$("leg").value, max_total_walk_mi: +$("total").value,
+    max_cost: $("budget").value === "" ? null : +$("budget").value, weights: weights(),
+  };
+  try {
+    const res = await fetch("api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Something went wrong");
+    plan = data; options = data.options; active = 0;
+    // Reflect what the Intent agent understood back into the form.
+    const rq = data.request;
+    $("from").value = rq.origin; $("to").value = rq.destination; $("hour").value = rq.hour;
+    $("weather").value = rq.weather; $("event").checked = rq.event; $("steep").checked = rq.avoid_steep;
+    if (rq.max_cost != null) $("budget").value = rq.max_cost;
+    for (const k of ["time", "cost", "health"]) { $("w-" + k).value = rq.weights[k]; $("v-" + k).textContent = rq.weights[k]; }
+    renderAll();
+  } catch (e) {
+    $("error").textContent = e.message;
+  } finally {
+    $("go").disabled = false; $("go").textContent = "Plan my trip";
+  }
+}
+
+async function rerankNow() {
+  if (!plan) return;
+  const res = await fetch("api/rerank", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan_id: plan.plan_id, weights: weights() }) });
+  const data = await res.json();
+  if (!res.ok) { $("error").textContent = data.error; return; }
+  options = data.options; active = 0; renderResults(); drawTrip();
+}
+
+function renderAll() {
+  const s = plan.stats;
+  $("meta").innerHTML = `<b>${esc(plan.origin_name)} → ${esc(plan.destination_name)}</b> · ${s.candidates} candidate trips from 4 specialists ·
+    ${s.feasible} passed the Critic · ${s.frontier} on the Pareto frontier · ${s.ms} ms · ${s.llm ? "Claude agents live" : "offline mode (rules + templates)"}`;
+  renderLive(); renderResults(); renderTrace(); drawTrip();
+}
+
+function renderLive() {
+  const lv = plan.live, w = lv.weather;
+  const icon = { rain: "🌧", fog: "🌫", clear: "☀️" }[lv.condition] || "☀️";
+  $("wx").style.display = "block";
+  $("wx").innerHTML = w
+    ? `${icon} <b>${w.temp_f}°F</b> ${esc(w.summary)} · wind ${w.wind_mph} mph · rain ${w.precip_pct}% <span style="color:var(--muted);font-size:12px">— NWS forecast for ${hourLabel(plan.request.hour)}</span>`
+    : `${icon} <b>${esc(lv.condition)}</b> <span style="color:var(--muted);font-size:12px">— ${plan.request.weather === "live" ? "live weather unavailable, assumed" : "set manually"}</span>`;
+  const badge = (label, on) => `<span class="${on ? "on" : "off"}">${esc(label)}</span>`;
+  $("sources").innerHTML = [
+    badge(`Weather: ${w ? "NWS live" : "manual"}`, !!w),
+    badge(`Transit: ${lv.transit}`, lv.transit === "511 live"),
+    badge(`Bikes: ${lv.bikes}`, lv.bikes === "GBFS live"),
+    badge(`511 calls ${lv.five11.calls_last_hour}/${lv.five11.budget} this hour`, lv.five11.enabled),
+  ].join("");
+}
+
+function renderResults() {
+  $("results").innerHTML = options.map((o, i) => {
+    const strip = o.legs.map(l => `<div style="flex:${Math.max(l.minutes + l.wait_min, 1)};background:${COLORS[l.mode]}" title="${MODE_NAMES[l.mode]} ${l.minutes} min"></div>`).join("");
+    const legs = o.legs.map(l => `<li><i class="dot" style="background:${COLORS[l.mode]}"></i><span>
+      <b>${MODE_NAMES[l.mode]}</b> ${l.line ? esc(l.line) + " " : ""}${l.distance_mi} mi → ${esc(l.to_name)}
+      <span style="color:var(--muted)">· ${Math.round(l.minutes)} min${l.wait_min ? ` + ${Math.round(l.wait_min)} wait` : ""}${l.cost ? ` · $${l.cost.toFixed(2)}` : ""}${l.surge > 1 ? ` · ⚡${l.surge}× surge` : ""}${l.mode === "walk" && l.grade > 0.04 ? " · ⛰ uphill" : ""}${l.note ? ` · <i>${esc(l.note)}</i>` : ""}</span></span></li>`).join("");
+    return `<div class="card ${i === active ? "active" : ""}" data-i="${i}">
+      <div class="top"><span class="label">${esc(o.label)}</span><span class="cost">$${o.cost.toFixed(2)}</span></div>
+      <div class="metrics">
+        <div><b>${Math.round(o.total_min)} min</b>door to door</div>
+        <div><b>${o.kcal}</b>kcal</div>
+        <div><b>${o.steps.toLocaleString()}</b>steps</div>
+        <div><b>${o.climb_ft} ft</b>climb</div>
+      </div>
+      <div class="strip">${strip}</div>
+      <ul class="legs">${legs}</ul>
+      <div class="why">${esc(o.why)}</div>
+      ${o.flags.length ? `<div class="flags">${o.flags.map(f => `<span>${esc(f)}</span>`).join("")}</div>` : ""}
+      <button class="book" data-book="${i}">Book this trip</button>
+    </div>`;
+  }).join("");
+}
+
+function renderTrace() {
+  $("trace-box").style.display = "block";
+  $("trace").innerHTML = `<table><tr><th>Agent</th><th>Kind</th><th>Model</th><th>ms</th><th>Detail</th></tr>` +
+    plan.trace.map(t => `<tr><td><b>${esc(t.agent)}</b></td><td>${esc(t.kind)}</td><td>${esc(t.model)}</td><td>${t.ms}</td><td>${esc(t.detail)}${t.tokens ? ` <i>(${t.tokens} tok)</i>` : ""}</td></tr>`).join("") + "</table>";
+  $("rej-box").style.display = plan.rejected.length ? "block" : "none";
+  $("rejected").innerHTML = "<ul>" + plan.rejected.map(r => `<li>${esc(r.trip)} — ${esc(r.reasons.join("; "))}</li>`).join("") + "</ul>";
+}
+
+function drawTrip() {
+  map.invalidateSize();
+  if (layer) map.removeLayer(layer);
+  layer = L.featureGroup().addTo(map);
+  const o = options[active];
+  if (!o) return;
+  for (const l of o.legs) {
+    L.polyline(l.path, { color: COLORS[l.mode], weight: l.mode === "walk" ? 4 : 6,
+      dashArray: l.mode === "walk" ? "2 8" : null, opacity: 0.9 })
+      .bindTooltip(`${MODE_NAMES[l.mode]}: ${l.frm_name} → ${l.to_name}`).addTo(layer);
+  }
+  // Transfer points: where one mode hands off to the next (e.g. walk → ride pickup).
+  o.legs.slice(1).forEach((l, i) => {
+    const prev = o.legs[i];
+    L.circleMarker(l.path[0], { radius: 6, color: COLORS[l.mode], weight: 3, fillColor: "#fff", fillOpacity: 1 })
+      .bindTooltip(`${MODE_NAMES[prev.mode]} → ${MODE_NAMES[l.mode]} at ${l.frm_name}`, { permanent: true, direction: "top", offset: [0, -6] })
+      .addTo(layer);
+  });
+  const start = o.legs[0].path[0], end = o.legs.at(-1).path.at(-1);
+  L.circleMarker(start, { radius: 8, color: "#fff", weight: 2, fillColor: "#16a34a", fillOpacity: 1 }).bindTooltip(plan.origin_name).addTo(layer);
+  L.circleMarker(end, { radius: 8, color: "#fff", weight: 2, fillColor: "#dc2626", fillOpacity: 1 }).bindTooltip(plan.destination_name).addTo(layer);
+  map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+}
+
+function book(i) {
+  const o = options[i];
+  const rides = o.legs.filter(l => l.mode === "ride");
+  $("modal-body").innerHTML = `<h3 style="margin-top:0">Trip booked (demo)</h3>
+    <p>${rides.length ? `Your driver will meet you at <b>${esc(rides[0].frm_name)}</b> in ~${rides[0].wait_min} min.` : "No ride needed — this trip is walk / transit / bike only."}</p>
+    <p style="color:var(--muted);font-size:13px">${Math.round(o.total_min)} min · $${o.cost.toFixed(2)} · ${o.kcal} kcal · ${o.steps.toLocaleString()} steps</p>
+    <p style="color:var(--muted);font-size:12px">Prototype only — no real ride was requested and no payment was taken.</p>
+    <button class="go" onclick="document.getElementById('modal').classList.remove('open')">Done</button>`;
+  $("modal").classList.add("open");
+}
+
+window.addEventListener("resize", () => map.invalidateSize());
+$("go").onclick = planTrip;
+$("q").addEventListener("keydown", e => { if (e.key === "Enter") planTrip(); });
+for (const k of ["time", "cost", "health"]) {
+  $("w-" + k).addEventListener("input", () => {
+    $("v-" + k).textContent = $("w-" + k).value;
+    clearTimeout(rerankTimer); rerankTimer = setTimeout(rerankNow, 150);
+  });
+}
+document.querySelectorAll(".presets button").forEach(b => b.onclick = () => {
+  const [t, c, h] = b.dataset.w.split(",");
+  $("w-time").value = t; $("w-cost").value = c; $("w-health").value = h;
+  for (const k of ["time", "cost", "health"]) $("v-" + k).textContent = $("w-" + k).value;
+  rerankNow();
+});
+$("results").addEventListener("click", e => {
+  const bk = e.target.closest("[data-book]");
+  if (bk) { book(+bk.dataset.book); return; }
+  const card = e.target.closest(".card");
+  if (card) { active = +card.dataset.i; renderResults(); drawTrip(); }
+});
+$("modal").addEventListener("click", e => { if (e.target.id === "modal") $("modal").classList.remove("open"); });
+init();
+</script>
+</body>
+</html>
