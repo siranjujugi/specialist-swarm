@@ -147,15 +147,15 @@ def bike_kcal(minutes, ebike, grade, weight_kg):
 
 # ── Leg tools (one per specialist) ────────────────────────────────────────────
 
-def walk_leg(a, b, weight_kg=75):
-    dist = haversine_mi(a, b) * WALK_CIRCUITY
+def walk_leg(a, b, weight_kg=75, dist=None, path=None, source="walk_leg"):
+    dist = dist if dist is not None else haversine_mi(a, b) * WALK_CIRCUITY
     g = leg_grade(a, b, dist)
     minutes = dist * MI_TO_M / 1000 / tobler_speed_kmh(g) * 60
     meters = dist * MI_TO_M
     return Leg("walk", a, b, round(dist, 2), round(minutes, 1),
                kcal=round(walk_kcal(meters, minutes, g, weight_kg), 1),
                steps=round(meters / STEP_LENGTH_M), climb_ft=max(elev_ft(b) - elev_ft(a), 0),
-               grade=round(g, 3), path=[latlon(a), latlon(b)], source="walk_leg")
+               grade=round(g, 3), path=path or [latlon(a), latlon(b)], source=source)
 
 
 def surge_at(key, hour, event):
@@ -173,17 +173,25 @@ def drive_minutes(dist_mi, hour):
     return dist_mi / mph * 60
 
 
-def ride_leg(a, b, hour=12, event=False):
-    """SIMULATED ride-hail estimate: base + distance + time + fee, × pickup-zone surge."""
-    dist = haversine_mi(a, b) * DRIVE_CIRCUITY
-    minutes = drive_minutes(dist, hour)
+def traffic_factor(hour):
+    """OSRM car times are free-flow; SF streets aren't."""
+    return 1.8 if hour in range(7, 10) or hour in range(16, 19) else 1.35
+
+
+def ride_leg(a, b, hour=12, event=False, dist=None, free_flow_min=None, path=None,
+             source="ride_estimate(simulated)"):
+    """SIMULATED ride-hail estimate: base + distance + time + fee, × pickup-zone surge.
+    Pass `dist` / `free_flow_min` / `path` from a real road route to replace the estimates."""
+    dist = dist if dist is not None else haversine_mi(a, b) * DRIVE_CIRCUITY
+    minutes = free_flow_min * traffic_factor(hour) if free_flow_min is not None \
+        else drive_minutes(dist, hour)
     mult, _ = surge_at(a, hour, event)
     fare = RIDE["base"] + RIDE["per_mile"] * dist + RIDE["per_min"] * minutes
     fare = max(fare * mult, RIDE["min_fare"]) + RIDE["booking_fee"]
     wait = RIDE["pickup_wait_min"] + (3 if mult > 1 else 0)
     return Leg("ride", a, b, round(dist, 2), round(minutes, 1), wait_min=wait,
-               cost=round(fare, 2), surge=mult, path=[latlon(a), latlon(b)],
-               source="ride_estimate(simulated)")
+               cost=round(fare, 2), surge=mult, path=path or [latlon(a), latlon(b)],
+               source=source)
 
 
 def transit_fare(line, a, b):
@@ -211,8 +219,8 @@ def dock_status(key, hour):
     return {"classic": h % 9, "ebike": (h // 9) % 5, "open_docks": (h // 45) % 12}
 
 
-def bike_leg(a, b, ebike, hour=12, weight_kg=75):
-    dist = haversine_mi(a, b) * WALK_CIRCUITY
+def bike_leg(a, b, ebike, hour=12, weight_kg=75, dist=None, path=None, source="bike_route"):
+    dist = dist if dist is not None else haversine_mi(a, b) * WALK_CIRCUITY
     g = leg_grade(a, b, dist)
     mph = 13 if ebike else 10 * max(0.5, 1 - 6 * max(g, 0))
     minutes = dist / mph * 60
@@ -223,7 +231,7 @@ def bike_leg(a, b, ebike, hour=12, weight_kg=75):
                wait_min=1, cost=round(cost, 2),
                kcal=round(bike_kcal(minutes, ebike, g, weight_kg), 1),
                climb_ft=max(elev_ft(b) - elev_ft(a), 0), grade=round(g, 3),
-               path=[latlon(a), latlon(b)], source="bike_route")
+               path=path or [latlon(a), latlon(b)], source=source)
 
 
 def nearest(key, candidates, max_mi=None):

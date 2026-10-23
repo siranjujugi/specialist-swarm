@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from . import bikes, five11, tools, weather
+from . import bikes, five11, osrm, tools, weather
 from .data import BIKE_DOCKS, PLACES, TRANSIT_LINES
 from .live import FeedError
 
@@ -22,6 +22,7 @@ INTENT_MODEL = os.environ.get("HOPPER_INTENT_MODEL", "claude-haiku-5-5")
 EXPLAIN_MODEL = os.environ.get("HOPPER_EXPLAIN_MODEL", "claude-haiku-5-5")
 SF_TZ = ZoneInfo("America/Los_Angeles")
 MAX_REALTIME_LOOKUPS = 4      # unique (line, board, alight) per plan — protects 511's 60/hr
+MAX_ROUTED_LEGS = 60          # unique street legs per plan sent to OSRM (cached for a day)
 
 
 def sf_hour():
@@ -354,6 +355,60 @@ def realtime_agent(trips, req, trace):
     return "511 live" if hits else "schedule (511 had no predictions)"
 
 
+def _street_leg(l, req):
+    """Rebuild a walk / bike / ride leg from its real OSRM street route."""
+    r = osrm.route(l.mode, tools.latlon(l.frm), tools.latlon(l.to))
+    if l.mode == "walk":
+        new = tools.walk_leg(l.frm, l.to, req["weight_kg"], dist=r["distance_mi"],
+                             path=r["path"], source="osrm.foot")
+    elif l.mode in ("bike", "ebike"):
+        new = tools.bike_leg(l.frm, l.to, l.mode == "ebike", req["hour"], req["weight_kg"],
+                             dist=r["distance_mi"], path=r["path"], source="osrm.bike")
+    else:
+        new = tools.ride_leg(l.frm, l.to, req["hour"], req["event"], dist=r["distance_mi"],
+                             free_flow_min=r["duration_min"], path=r["path"],
+                             source="osrm.car+traffic")
+    new.note = l.note
+    return new, r["cache"]
+
+
+def routing_agent(trips, req, trace):
+    """Swap estimated walk / bike / ride legs for real OSRM street routes, in place."""
+    t0 = time.perf_counter()
+    if osrm_off():
+        trace.log("Routing (OSRM)", "fallback", 0, "offline → straight-line estimates")
+        return "estimated (offline)"
+    todo = {}
+    for t in sorted(trips, key=lambda t: t.total_min):
+        for l in t.legs:
+            if l.mode in osrm.PROFILE and not l.source.startswith("osrm"):
+                todo.setdefault((l.mode, l.frm, l.to), l)
+    keys = list(todo)[:MAX_ROUTED_LEGS]
+    routed, caches, failed = {}, {"live": 0, "memory": 0, "disk": 0}, 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {k: pool.submit(_street_leg, todo[k], req) for k in keys}
+        for k, f in futures.items():
+            try:
+                routed[k], cache = f.result()
+                caches[cache] = caches.get(cache, 0) + 1
+            except FeedError:
+                failed += 1
+    for t in trips:
+        t.legs = [routed.get((l.mode, l.frm, l.to), l) for l in t.legs]
+    skipped = len(todo) - len(keys)
+    trace.log("Routing (OSRM)", "tools", (time.perf_counter() - t0) * 1000,
+              f"{len(routed)} street legs routed ({caches['live']} live, "
+              f"{caches['memory'] + caches['disk']} cached), {failed} failed"
+              + (f", {skipped} over cap kept as estimates" if skipped else ""))
+    if not routed:
+        return "estimated (OSRM unavailable)"
+    return "OSRM streets" if not failed and not skipped else "OSRM streets (partial)"
+
+
+def osrm_off():
+    return os.environ.get("HOPPER_OFFLINE") == "1" or os.environ.get("HOPPER_NO_OSRM") == "1"
+
+
 def health_agent(trips, req, trace):
     t0 = time.perf_counter()
     for t in trips:
@@ -556,14 +611,18 @@ def orchestrate(body):
                 candidates.append(t)
 
     transit_source = realtime_agent(candidates, req, trace)
-    health_agent(candidates, req, trace)
+    # Pass 1 prunes on cheap estimates; only survivors (plus the door-to-door baseline)
+    # get real OSRM street routes, then the Critic re-checks them on real distances.
     feasible, rejected = critic_agent(candidates, req, trace)
+    baseline_trip = tools.Trip([tools.ride_leg(req["origin"], req["destination"],
+                                               req["hour"], req["event"])], "baseline")
+    routes_source = routing_agent(feasible + [baseline_trip], req, trace)
+    health_agent(feasible, req, trace)
+    feasible, rejected2 = critic_agent(feasible, req, trace)
+    rejected += rejected2
     if not feasible:
         raise PlanError("No feasible trip under these limits — try relaxing walk distance or budget.")
     picks, front, scores = ranker_agent(feasible, req["weights"], trace)
-
-    baseline = tools.ride_leg(req["origin"], req["destination"], req["hour"], req["event"])
-    baseline_trip = tools.Trip([baseline], "baseline")
     why = explainer_agent(picks, baseline_trip, trace, client)
 
     options = [{**t.to_dict(), "label": lbl, "why": why[t.id], "score": round(scores[t.id], 3)}
@@ -574,7 +633,7 @@ def orchestrate(body):
                                            "avoid_steep", "max_cost", "weight_kg")},
                     "weather": weather_input},
         "live": {"weather": req["weather_detail"], "condition": req["weather"],
-                 "transit": transit_source,
+                 "transit": transit_source, "routes": routes_source,
                  "bikes": req.get("_bike_source", "not used"),
                  "five11": five11.status(), "live_now": req["live_now"]},
         "origin_name": tools.name(req["origin"]), "destination_name": tools.name(req["destination"]),

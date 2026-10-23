@@ -24,6 +24,14 @@ Tests: `python3 -m pytest -q tests` (no network — live feeds are tested with s
 | **511 SF Bay** StopMonitoring + service alerts | Real Muni/BART/cable-car wait times; ⚠ alert flags on trips | `FIVE11_API_KEY` (free: https://511.org/open-data/token) | Schedule headway ÷ 2 |
 | **NWS** api.weather.gov | Hourly forecast at the origin → rain/fog/clear, wind (> 20 mph turns bikes off) | none | Assume clear (or pick weather manually) |
 | **Bay Wheels GBFS** | Real classic / e-bike counts and open docks at the nearest station | none | Deterministic pseudo-availability |
+| **OSRM** (routing.openstreetmap.de foot / bike / car) | Real street routes for walk, bike, and ride legs: distance, drive time (× traffic factor 1.35, 1.8 at rush hour), and the polyline drawn on the map | none | Straight-line estimates |
+
+**Routing flow:** the Critic first prunes candidates on cheap estimates; surviving trips and
+the door-to-door baseline get OSRM street routes (4 in parallel, ≤ 60 unique legs per plan,
+cached on disk for a day); then Health and the Critic re-run on the real distances before
+ranking — so cards, labels, explanations, and the map all use the street route.
+The FOSSGIS servers are a shared community service: keep volume low, or point
+`OSRM_BASE_URL` at your own `osrm-backend`. `HOPPER_NO_OSRM=1` turns routing off.
 
 - Put keys in `hopper/.env` (see `.env.example`; git-ignored). Real env vars win.
 - Live arrivals and docks are used only when the trip leaves **this hour** (SF time);
@@ -65,8 +73,10 @@ flowchart LR
 
 ## Known limitations (prototype)
 
-- Places are a fixed gazetteer of ~40 SF landmarks; legs are drawn as straight lines.
-  Next step: OSM street routing (OSMnx/Valhalla) and geocoding.
+- Places are a fixed gazetteer of ~40 SF landmarks (no free-text geocoding yet).
+- Street routes come from OSRM; transit legs are still drawn stop-to-stop, and OSRM car
+  times have no live traffic (a fixed traffic factor is applied).
+- Hill grade still uses landmark elevations, not the street route's elevation profile.
 - Transit routes are a hand-built subset of 7 lines with fixed segment times; single line
   per trip, no transfers. 511 supplies live waits and alerts, not routing. Next step:
   OpenTripPlanner 2 on 511 GTFS + OpenStreetMap (needs Docker or Java 21+).

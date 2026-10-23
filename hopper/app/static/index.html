@@ -165,7 +165,7 @@ let COLORS = {}, PLACES = [], plan = null, options = [], active = 0, layer = nul
 
 const map = L.map("map", { zoomControl: true }).setView([37.773, -122.431], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
+  maxZoom: 19, attribution: "&copy; OpenStreetMap contributors · routes: OSRM / FOSSGIS" }).addTo(map);
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function hourLabel(h) { return h === 0 ? "12 am" : h < 12 ? `${h} am` : h === 12 ? "12 pm" : `${h - 12} pm`; }
@@ -239,6 +239,7 @@ function renderLive() {
   const badge = (label, on) => `<span class="${on ? "on" : "off"}">${esc(label)}</span>`;
   $("sources").innerHTML = [
     badge(`Weather: ${w ? "NWS live" : "manual"}`, !!w),
+    badge(`Routes: ${lv.routes}`, lv.routes.startsWith("OSRM")),
     badge(`Transit: ${lv.transit}`, lv.transit === "511 live"),
     badge(`Bikes: ${lv.bikes}`, lv.bikes === "GBFS live"),
     badge(`511 calls ${lv.five11.calls_last_hour}/${lv.five11.budget} this hour`, lv.five11.enabled),
