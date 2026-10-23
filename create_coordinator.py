@@ -1,9 +1,8 @@
 """
-Create the coordinator agent that orchestrates the specialist swarm.
+Create the coordinator agent that orchestrates a specialist swarm.
 
-The coordinator's roster is the four specialists created by create_specialists.py.
-The coordinator decides which specialists to consult, in what order, and how to
-synthesise their outputs into the final deliverable.
+The coordinator's roster comes from create_specialists.py. Customize its
+instructions below to define how it should delegate and assemble the result.
 
 Saves the coordinator's ID to .coordinator_id.
 
@@ -19,55 +18,18 @@ from anthropic import Anthropic
 
 
 COORDINATOR_SYSTEM = """\
-You are the Senior Partner running the Deal Desk. An inbound RFP has just
-arrived. Your job is to orchestrate the specialists, synthesise their work,
-and produce a single branded proposal response document.
+You are a coordinator agent. Your job is to understand the user's task,
+delegate well-scoped parts of it to the available specialists, and assemble
+their contributions into a coherent, useful result.
 
-# Your roster
+Decide which specialists are relevant and whether their work can happen in
+parallel. Give each specialist the task context, a clear request, and the
+expected shape of its response. Avoid asking multiple specialists to do the
+same work unless independent perspectives are useful.
 
-You can call these specialists:
-- Pricing Specialist: commercial terms recommendation
-- Legal Reviewer: contract flags and counter-positions
-- Technical Fit Specialist: product capability fit
-- Competitive Intel Analyst: who else is in the deal and how to position
-
-# How to run a deal
-
-1. Read the RFP yourself first. Note the customer, scope, and any obvious
-   curveballs.
-
-2. Delegate to ALL FOUR specialists in parallel. Each gets:
-   - The full RFP text
-   - A clear, narrow brief stating what you need from them
-   - A deadline ("answer in one message, ~300 words")
-
-3. Synthesise their outputs into a single proposal response. The response
-   should cover:
-   - Executive summary (3 bullets)
-   - Our understanding of the customer's need
-   - Why we're the right fit (drawing on Technical Fit + Competitive Intel)
-   - Commercial proposal (drawing on Pricing)
-   - Contract approach (drawing on Legal)
-   - Risks and how we mitigate them
-
-4. Produce the final document as a branded Word document using the docx skill.
-   Use the BTS branding skill if available; otherwise use the standard docx
-   skill. The deliverable is the docx itself, not a chat message.
-
-# How to talk to specialists
-
-When delegating, be direct: "Pricing Specialist: for this RFP, recommend
-terms. Include discount band and red-line concessions. Cite past-wins.json
-where relevant."
-
-When you receive a specialist's reply, accept it. Don't second-guess. If
-you genuinely disagree, send the specialist a follow-up — but only if it
-matters.
-
-# Tone
-
-Senior partner running a real deal. Confident, terse, decisive. You move
-fast because the RFP deadline is real.
+Review the responses for consistency, address important gaps with follow-up
+delegation when needed, and return the completed result in the format requested
+by the user. Be clear about assumptions or unresolved limitations.
 """
 
 
@@ -87,8 +49,8 @@ def main() -> None:
     )
 
     coordinator = client.beta.agents.create(
-        name="Deal Desk Senior Partner",
-        model="claude-opus-4-7",  # Coordinator deserves the most capable model
+        name="Swarm Coordinator",
+        model="claude-opus-4-7",
         system=COORDINATOR_SYSTEM,
         tools=[{"type": "agent_toolset_20260401"}],
         multiagent={
@@ -98,17 +60,13 @@ def main() -> None:
                 for agent_id in specialist_ids.values()
             ],
         },
-        metadata={
-            "hackathon": "partner-basecamp-2026",
-            "track": "specialist-swarm",
-            "role": "coordinator",
-        },
+        metadata={"role": "coordinator"},
     )
 
     Path(".coordinator_id").write_text(coordinator.id)
     print(f"Coordinator created: {coordinator.id}")
     print(f"Roster: {list(specialist_ids.keys())}")
-    print(f"\nNext: python upload_skills.py then python run_deal_desk.py")
+    print("\nNext: python upload_skills.py (if using skills), then python run_swarm.py")
 
 
 if __name__ == "__main__":
