@@ -205,6 +205,32 @@ flowchart LR
 - Specialists fan out in parallel. Moving the sliders re-runs **only the Ranker** (`/api/rerank`).
 - The UI's "Agent swarm trace" panel shows each agent's model, latency, and tokens.
 
+## Agent evals
+
+`evals/` grades the swarm's answers, not just its code. The checks judge each plan
+against a written spec in `evals/cases.json`, never by calling the planner's own logic.
+
+```bash
+python -m evals.run                    # offline, deterministic, free (CI runs this on every push)
+python -m evals.run --live             # also grades Claude's Intent + Explainer (needs ANTHROPIC_API_KEY)
+python -m evals.run --update-golden    # re-record golden.json after an intended routing change
+```
+
+| Suite | What it checks |
+|---|---|
+| integrity | every option is one connected journey from the origin to the destination, with no negative numbers |
+| explanation | **grounding** (every number in the one-liner is in the facts) + **faithfulness** ("saves $X", "+N min", "N min faster", "+N kcal" are true and point the right way) |
+| labels | "Fastest", "Cheapest" and "Healthiest" chips are true among the options shown |
+| mode | the top pick obeys its Mode's rules and serves its goal (Hustle within 15% of the fastest compliant trip, Broke within $0.50 of the cheapest and ride-free when possible, Burn within 20% of the most active) |
+| cross-mode | for the same request, each Mode's pick beats the other Modes' picks on its own goal whenever those picks also follow its rules |
+| expectations | hand-written truths: no bike share in rain, budget caps, no steep walks, Broke to SFO takes BART |
+| golden | top-pick route, time, cost and kcal match `golden.json` (±10% time, ±$0.50, ±15% kcal) |
+| intent | rider messages are parsed into the right fields — by the rules parser (offline) and by Claude (`--live`) |
+
+12 golden trips × 3 Modes plus 14 intent prompts. In CI the report goes to the run's summary
+page and `eval-results.json` is uploaded as a build artifact. The live run happens only when you
+start the workflow by hand with **live** ticked; it needs the `ANTHROPIC_API_KEY` repo secret.
+
 ## Health math
 
 - Walking: ACSM walking equation (net kcal, resting excluded), Tobler's hiking function for

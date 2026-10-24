@@ -603,9 +603,10 @@ NUM = re.compile(r"\d+(?:\.\d+)?")
 
 
 def grounded(sentence, facts_blob):
-    """True if every number in the sentence appears in the facts we gave the model."""
-    allowed = {n.rstrip("0").rstrip(".") for n in NUM.findall(facts_blob)}
-    return all(n.rstrip("0").rstrip(".") in allowed for n in NUM.findall(sentence))
+    """True if every number in the sentence appears in the facts we gave the model.
+    Compared as values, so "3.00" matches 3.0 but "40" never matches 4."""
+    allowed = {float(n) for n in NUM.findall(facts_blob)}
+    return all(float(n) in allowed for n in NUM.findall(sentence))
 
 
 def explainer_agent(picks, baseline, trace, client):
