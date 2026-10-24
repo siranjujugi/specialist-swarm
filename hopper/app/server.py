@@ -20,8 +20,8 @@ def load_dotenv(path=Path(__file__).resolve().parent.parent / ".env"):
 
 load_dotenv()
 
-from . import accounts, bars, geo, tools, weather  # noqa: E402 — needs env loaded first
-from .agents import PlanError, orchestrate, rerank, sf_hour  # noqa: E402
+from . import accounts, bars, geo, tools, weather, world  # noqa: E402 — needs env loaded first
+from .agents import PlanError, orchestrate, rerank  # noqa: E402
 from .data import MODE_COLORS, PLACES  # noqa: E402
 from .live import FeedError  # noqa: E402
 from .modes import MODES  # noqa: E402
@@ -34,10 +34,17 @@ PLANS = OrderedDict()   # plan_id → (feasible trips, explanations, baseline, c
 
 @app.get("/api/geocode")
 def geocode():
-    """Address / place type-ahead inside San Francisco (Photon, cached)."""
+    """Worldwide address / place type-ahead (Photon, cached), biased to the map centre."""
     q = (request.args.get("q") or "").strip()[:120]
+    near = None
     try:
-        return jsonify({"results": geo.search(q)})
+        lat, lon = float(request.args["lat"]), float(request.args["lon"])
+        if -85 <= lat <= 85 and -180 <= lon <= 180:
+            near = [lat, lon]
+    except (KeyError, ValueError):
+        pass
+    try:
+        return jsonify({"results": geo.search(q, near=near)})
     except FeedError:
         return jsonify({"results": [], "error": "Address search is unavailable right now."}), 503
 
@@ -48,8 +55,8 @@ def reverse():
         lat, lon = float(request.args["lat"]), float(request.args["lon"])
     except (KeyError, ValueError):
         return jsonify({"error": "lat and lon are required."}), 400
-    if not (geo.inside_sf(lat, lon) or geo.near_sfo(lat, lon)):
-        return jsonify({"error": "You're outside San Francisco. Hopper covers SF and SFO only."}), 422
+    if not (-85 <= lat <= 85 and -180 <= lon <= 180):
+        return jsonify({"error": "That location isn't valid."}), 422
     try:
         return jsonify(geo.reverse(lat, lon))
     except FeedError:
@@ -117,22 +124,33 @@ def crawl():
             geo.ensure_ready(k)
     stops = max(2, min(int(body.get("stops") or 3), 5))
     vibe = body.get("vibe") if body.get("vibe") in bars.VIBES else "any"
-    hour = int(body.get("hour", sf_hour())) % 24
+    lat, lon = tools.latlon(start)
+    tz = world.timezone_at(lat, lon)
+    raw_hour = body.get("hour")
+    hour = world.local_now(tz).hour if raw_hour in (None, "", "now") else int(raw_hour) % 24
     per_stop = max(20, min(int(body.get("minutes_per_stop") or 45), 120))
     condition, wx = body.get("weather") or "live", None
     if condition == "live":
-        try:
-            wx = weather.at(*tools.latlon(start), hour)
-            condition = wx["condition"]
-        except FeedError:
+        for fetch in ([weather.at] if geo.in_us(lat, lon) else []) + [world.weather_at]:
+            try:
+                wx = fetch(lat, lon, hour)
+                condition = wx["condition"]
+                break
+            except (FeedError, KeyError, IndexError, TypeError, ValueError):
+                continue
+        else:
             condition = "clear"
     out, source = bars.plan_crawl(start, end, stops, vibe, hour, per_stop, condition,
                                   bool(body.get("event")), float(body.get("weight_kg") or 75))
     if not out:
+        hint = "a busier neighborhood (North Beach, Mission, Castro)" if world.in_sf_area(lat, lon) \
+            else "a busier area or a different start"
+        if source.startswith("unavailable"):
+            return jsonify({"error": "Bar data for this area is unavailable right now. Try again in a minute."}), 503
         return jsonify({"error": f"No {bars.VIBES[vibe].lower()} crawl of {stops} bars within walking "
-                                 f"distance of {tools.name(start)} — try another vibe, fewer stops, "
-                                 "or a busier neighborhood (North Beach, Mission, Castro)."}), 422
-    return jsonify({**out, "start_name": tools.name(start),
+                                 f"distance of {tools.name(start)}. Try another vibe, fewer stops, or {hint}."}), 422
+    units = "mi" if tz.startswith("America/") or tz in ("Europe/London", "Europe/Dublin") else "km"
+    return jsonify({**out, "start_name": tools.name(start), "units": units, "tz": tz,
                     "end_name": tools.name(end) if end else None,
                     "weather": wx, "condition": condition, "vibe": vibe, "stops_requested": stops})
 

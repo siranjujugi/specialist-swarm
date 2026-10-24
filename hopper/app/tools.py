@@ -34,6 +34,7 @@ class Leg:
     line_id: str = ""
     surge: float = 1.0
     note: str = ""            # e.g. "next N in 4 min (511 live)"
+    color: str = ""           # agency line colour when known (e.g. Paris Metro 1 = #FFCD00)
     path: list = field(default_factory=list)
     source: str = ""          # which tool produced the numbers (Critic checks this)
 
@@ -122,10 +123,16 @@ def in_sf(key):
         SF_BOUNDS["lon"][0] <= lon <= SF_BOUNDS["lon"][1]
 
 
+def climb(a, b):
+    """Elevation gain a → b in feet; 0 when either end's elevation isn't known yet."""
+    ea, eb = elev_ft(a), elev_ft(b)
+    return 0 if ea is None or eb is None else eb - ea
+
+
 def leg_grade(a, b, distance_mi):
     if distance_mi <= 0:
         return 0.0
-    return (elev_ft(b) - elev_ft(a)) * FT_TO_M / (distance_mi * MI_TO_M)
+    return climb(a, b) * FT_TO_M / (distance_mi * MI_TO_M)
 
 
 # ── Health math ───────────────────────────────────────────────────────────────
@@ -159,7 +166,7 @@ def walk_leg(a, b, weight_kg=75, dist=None, path=None, source="walk_leg"):
     meters = dist * MI_TO_M
     return Leg("walk", a, b, round(dist, 2), round(minutes, 1),
                kcal=round(walk_kcal(meters, minutes, g, weight_kg), 1),
-               steps=round(meters / STEP_LENGTH_M), climb_ft=max(elev_ft(b) - elev_ft(a), 0),
+               steps=round(meters / STEP_LENGTH_M), climb_ft=max(climb(a, b), 0),
                grade=round(g, 3), path=path or [latlon(a), latlon(b)], source=source)
 
 
@@ -244,7 +251,7 @@ def bike_leg(a, b, ebike, hour=12, weight_kg=75, dist=None, path=None, source="b
     return Leg("ebike" if ebike else "bike", a, b, round(dist, 2), round(minutes, 1),
                wait_min=1, cost=round(cost, 2),
                kcal=round(bike_kcal(minutes, ebike, g, weight_kg), 1),
-               climb_ft=max(elev_ft(b) - elev_ft(a), 0), grade=round(g, 3),
+               climb_ft=max(climb(a, b), 0), grade=round(g, 3),
                path=path or [latlon(a), latlon(b)], source=source)
 
 

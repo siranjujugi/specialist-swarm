@@ -25,7 +25,7 @@ MODES = {
 LOOSEST_WALK_LEG_MI = max(m.get("max_walk_leg_mi", 0) for m in MODES.values())
 LOOSEST_TOTAL_WALK_MI = max(m.get("max_total_walk_mi", 0) for m in MODES.values())
 
-TRANSIT = ("muni", "bart", "cable")
+TRANSIT = ("muni", "bart", "cable", "bus", "tram", "metro", "rail", "ferry")
 ACTIVE = ("walk", "bike", "ebike")
 
 

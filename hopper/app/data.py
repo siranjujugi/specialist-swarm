@@ -106,4 +106,6 @@ BIKE = {"unlock": 4.49, "included_min": 30, "classic_extra_per_15": 3.00,
         "ebike_per_min": 0.30}
 
 MODE_COLORS = {"walk": "#16a34a", "ride": "#111827", "muni": "#dc2626", "bart": "#2563eb",
-               "cable": "#a16207", "bike": "#7c3aed", "ebike": "#c026d3"}
+               "cable": "#a16207", "bike": "#7c3aed", "ebike": "#c026d3",
+               # worldwide transit (Transitous); a line's own colour wins when the agency publishes one
+               "bus": "#e04f16", "tram": "#0e9384", "metro": "#2e90fa", "rail": "#9e165f", "ferry": "#0086c9"}

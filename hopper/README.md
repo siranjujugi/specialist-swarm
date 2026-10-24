@@ -15,6 +15,30 @@ Open http://localhost:5080. With `ANTHROPIC_API_KEY` set, the Intent and Explain
 use Claude (`claude-haiku-5-5`); without it (or with `HOPPER_OFFLINE=1`) they fall back to
 a rule parser and templates. Every number is identical in both modes.
 
+## Worldwide
+
+Hopper plans trips in any city. San Francisco keeps its richer local stack; everywhere else
+uses free global sources (no API keys):
+
+| Piece | San Francisco | Everywhere else |
+|---|---|---|
+| Transit | Hand-built Muni/BART/cable lines + 511 live arrivals | **Transitous** (api.transitous.org) — worldwide GTFS routing, live times where agencies publish them, agency line names and colours. No fares, so transit cost is a flat estimate |
+| Bike share | Bay Wheels GBFS | **CityBikes** (~800 networks); picks the network with the most bikes within 0.7 km |
+| Weather | NWS (any US trip) | **Open-Meteo** (also supplies the local time zone) |
+| Elevation | USGS EPQS (US) | Open-Meteo elevation |
+| Ride-hail walk-ahead pickups | SF landmarks | Points sampled along the real walking route |
+| Bars (Bar Crawl) | Bundled snapshot | Live Overpass search around the start |
+| Walk / bike / drive routes | OSRM | OSRM |
+
+- Times are in the trip city's own time zone ("Leave now" = now there). Distances show in
+  miles for the US/UK and km elsewhere. Prices outside the US are rough USD estimates.
+- Trips must be within ~100 miles (city/metro trips); "Explore another city" re-centres the
+  map so address search favours that city.
+- Outside SF the plain-English parser never fuzzy-matches SF landmarks; it geocodes the
+  rider's words near where the map is.
+- The FOSSGIS OSRM servers rate-limit bursts; when they refuse, legs fall back to estimates
+  ("Estimated routes"). For real traffic, run your own `osrm-backend` and set `OSRM_BASE_URL`.
+
 ## Place search
 
 "Pickup" and "Where to?" are search boxes, not dropdowns. Suggestions come from your current

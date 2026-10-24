@@ -11,17 +11,18 @@ PHOTON = {"features": [
                     "district": "Rincon Hill", "osm_value": "yes"}},
     {"geometry": {"coordinates": [-122.395091, 37.7872405]},          # duplicate
      "properties": {"name": "500 Folsom", "housenumber": "510", "street": "Folsom Street"}},
-    {"geometry": {"coordinates": [-122.2711, 37.8044]},               # Oakland — outside SF
-     "properties": {"name": "Oakland City Hall"}},
+    {"geometry": {"coordinates": [-122.2711, 37.8044]},               # Oakland — fine now (worldwide)
+     "properties": {"name": "Oakland City Hall", "city": "Oakland", "state": "California", "countrycode": "US"}},
     {"geometry": {"coordinates": [-122.3790, 37.6213]},               # SFO — allowed
      "properties": {"name": "SFO International Terminal"}},
 ]}
 
 
-def test_parse_photon_keeps_sf_and_sfo_dedupes_and_drops_outside():
+def test_parse_photon_dedupes_and_labels_worldwide_results():
     out = geo.parse_photon(PHOTON)
-    assert [r["name"] for r in out] == ["500 Folsom", "SFO International Terminal"]
+    assert [r["name"] for r in out] == ["500 Folsom", "Oakland City Hall", "SFO International Terminal"]
     assert out[0]["address"] == "500 Folsom Street, Rincon Hill"
+    assert out[1]["address"] == "Oakland, California"
 
 
 def test_register_makes_geo_places_usable_by_tools():
@@ -32,9 +33,10 @@ def test_register_makes_geo_places_usable_by_tools():
     assert key not in geo.landmarks()
 
 
-def test_register_rejects_places_outside_sf():
+def test_register_accepts_any_city_but_rejects_invalid_coordinates():
+    assert geo.register("Louvre", 48.8606, 2.3376).startswith("geo:48.86")
     with pytest.raises(ValueError):
-        geo.register("Oakland", 37.80, -122.27)
+        geo.register("Nowhere", 123.0, 2.0)
 
 
 def test_resolve_accepts_landmarks_geo_keys_and_points():
@@ -120,9 +122,10 @@ def test_saved_places_home_replaces_and_require_sign_in(client):
     r = client.post("/api/me/places", json={**point, "name": "New home", "lat": 37.76})
     homes = [p for p in r.json["places"] if p["label"] == "Home"]
     assert len(homes) == 1 and homes[0]["name"] == "New home"
-    assert client.post("/api/me/places", json={**point, "lat": 37.80, "lon": -122.27}).status_code == 400
+    assert client.post("/api/me/places", json={**point, "label": "Paris", "lat": 48.86, "lon": 2.34}).status_code == 200
+    assert client.post("/api/me/places", json={**point, "lat": 123.0}).status_code == 400
     pid = homes[0]["id"]
-    assert client.delete(f"/api/me/places/{pid}").json["places"] == []
+    assert [p["label"] for p in client.delete(f"/api/me/places/{pid}").json["places"]] == ["Paris"]
 
 
 def test_trip_history_records_newest_first(client):

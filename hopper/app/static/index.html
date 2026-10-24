@@ -21,6 +21,7 @@
     --shadow: 0 8px 28px rgb(0 0 0 / .14), 0 1px 3px rgb(0 0 0 / .08);
     --m-walk: #12a150; --m-ride: #000000; --m-muni: #d92d20; --m-bart: #276ef1;
     --m-cable: #a15c07; --m-bike: #7a3ff2; --m-ebike: #c11574;
+    --m-bus: #e04f16; --m-tram: #0e9384; --m-metro: #2e90fa; --m-rail: #9e165f; --m-ferry: #0086c9;
     --display: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
     --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
     --sheet: 58vh;
@@ -135,6 +136,9 @@
   .pill:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 
   .section-title { font: 700 20px/1.2 var(--display); margin: 22px 0 6px; }
+  .cities { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cities button { height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--rule); background: var(--bg); font-weight: 600; font-size: 14px; }
+  .cities button[aria-pressed=true] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   .places { list-style: none; margin: 0; padding: 0; }
   .places button { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 0; border: 0;
                    background: none; text-align: left; border-bottom: 1px solid var(--rule); }
@@ -353,7 +357,7 @@
         <div class="shortcuts" id="shortcuts" hidden></div>
         <div class="ask" id="ask-wrap">
           <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8zM19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
-          <input id="q" type="text" autocomplete="off" aria-label="Describe your trip" placeholder="Or describe it: late, 500 Folsom St to Coit Tower">
+          <input id="q" type="text" autocomplete="off" aria-label="Describe your trip" placeholder="Or describe it: late, Gare du Nord to the Louvre">
         </div>
 
         <div class="modes" id="modes" role="radiogroup" aria-label="Mode">
@@ -398,8 +402,12 @@
           <h3 class="section-title" id="recent-title">Recent</h3>
           <ul class="places" id="recent"></ul>
         </div>
+        <div id="explore">
+          <h3 class="section-title">Explore another city</h3>
+          <div class="cities" id="cities"></div>
+        </div>
         <div id="popular">
-          <h3 class="section-title">Popular right now</h3>
+          <h3 class="section-title">Popular in San Francisco</h3>
           <ul class="places" id="places"></ul>
         </div>
 
@@ -434,7 +442,7 @@
       <div class="opts" id="results" aria-live="polite"></div>
       <details class="more" id="trace-box" hidden><summary>How the agents planned this</summary><div id="trace"></div></details>
       <details class="more" id="rej-box" hidden><summary>Trips the checker ruled out</summary><div id="rejected"></div></details>
-      <p class="fine">Ride prices are simulated estimates, not Uber or Lyft quotes. Transit and bike fares are approximate, calories are estimates, and booking is a demo.</p>
+      <p class="fine">Ride prices are simulated estimates, not Uber or Lyft quotes. Transit and bike fares are approximate (outside the US they're rough USD estimates), calories are estimates, and booking is a demo.</p>
     </div>
   </div>
 
@@ -447,7 +455,8 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 const $ = (id) => document.getElementById(id);
-const MODE_NAMES = { walk: "Walk", ride: "Ride", muni: "Muni", bart: "BART", cable: "Cable car", bike: "Bike", ebike: "E-bike" };
+const MODE_NAMES = { walk: "Walk", ride: "Ride", muni: "Muni", bart: "BART", cable: "Cable car", bike: "Bike", ebike: "E-bike",
+                     bus: "Bus", tram: "Tram", metro: "Metro", rail: "Train", ferry: "Ferry" };
 const MODE_LABELS = { hustle: "Hustle", broke: "Broke", burn: "Burn", barcrawl: "Bar Crawl", custom: "Custom" };
 const ICONS = {
   walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2.2-6.5 2.8 2.5V21M8.5 12.5l1.8-4 3.4.6 2.3 3.4M12.2 14.5 11 9"/>',
@@ -457,6 +466,11 @@ const ICONS = {
   cable: '<path d="M3 3l18 3M12 4.5V8M5.5 8h13l1 9h-15zM8 17v2.5M16 17v2.5M9 11h6"/>',
   bike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-7h5l3 7M10 9 9 6.5H7M15 9l1-2.5h1.5"/>',
   ebike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-7h5l3 7M13 5l-1.5 3h2l-1.5 3"/>',
+  bus: '<rect x="5" y="3" width="14" height="15" rx="2.5"/><path d="M5 11h14M8 21v-3M16 21v-3M8.5 14.5h.01M15.5 14.5h.01"/>',
+  tram: '<rect x="6" y="6" width="12" height="12" rx="2.5"/><path d="M6 12h12M9 21l1-3M15 21l-1-3M9 3h6M12 3v3"/>',
+  metro: '<circle cx="12" cy="12" r="9"/><path d="M8 16V8l4 5 4-5v8"/>',
+  rail: '<rect x="6" y="3" width="12" height="14" rx="3"/><path d="M6 11h12M8 21l2-4M16 21l-2-4M9.5 14h.01M14.5 14h.01"/>',
+  ferry: '<path d="M3 18c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0M5 15l1.5-5h11L19 15M9 10V6h6v4"/>',
   pin: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   home: '<path d="M4 11 12 4l8 7M6 9.5V20h12V9.5M10 20v-5h4v5"/>',
@@ -467,6 +481,8 @@ const ICONS = {
   x: '<path d="M6 6l12 12M18 6 6 18"/>', trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
 };
 const icon = (m) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[m] || ICONS.pin}</svg>`;
+const CITIES = [["San Francisco", 37.7749, -122.4194], ["New York", 40.758, -73.9855], ["London", 51.5072, -0.1276],
+  ["Paris", 48.8566, 2.3522], ["Berlin", 52.52, 13.405], ["Tokyo", 35.6812, 139.7671], ["Sydney", -33.8688, 151.2093]];
 const POPULAR = [
   ["oracle_park", "Giants games and the waterfront"], ["ferry_building", "Food hall on the Embarcadero"],
   ["sfo", "Flights, via BART or a ride"], ["golden_gate_park", "de Young and the park"],
@@ -496,18 +512,32 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
   const [b, r] = canvasLayers(); tiles.setUrl(esri(b)); labels.setUrl(esri(r));
 });
 
+// Where search and geocoding are biased: set instantly when a city is picked, then follows the map.
+let searchCenter = [37.7749, -122.4194];
+map.on("moveend", () => { const c = map.getCenter(); searchCenter = [c.lat, c.lng]; });
+const legColor = (l) => l.color || `var(--m-${l.mode})`;
+function dist(mi, units) {
+  return (units || plan?.units || "mi") === "km" ? `${(mi * 1.609).toFixed(1)} km` : `${(+mi).toFixed(mi < 10 ? 2 : 1)} mi`;
+}
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function hourLabel(h) { return h === 0 ? "12 am" : h < 12 ? `${h} am` : h === 12 ? "12 pm" : `${h - 12} pm`; }
 function weights() { return { time: +$("w-time").value, cost: +$("w-cost").value, health: +$("w-health").value }; }
 function mins(m) { m = Math.round(m); return m >= 60 ? `${Math.floor(m / 60)} hr ${m % 60} min` : `${m} min`; }
-const sfNow = () => new Date(new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
-const sfHour = () => sfNow().getHours();
-function clock(d) { return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase(); }
-function arrival(totalMin, hour) {
-  const start = sfNow();
-  if (hour !== sfHour()) start.setHours(hour, 0, 0, 0);
-  return clock(new Date(start.getTime() + totalMin * 60000));
+// Times are in the trip city's own time zone (SF, Paris, Tokyo…), whatever the viewer's zone.
+function minutesNowIn(tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz || "America/Los_Angeles", hour: "numeric",
+    minute: "numeric", hourCycle: "h23" }).formatToParts(new Date()).map(x => [x.type, x.value]));
+  return (+p.hour) * 60 + (+p.minute);
 }
+function clockFromMinutes(m) {
+  m = Math.round(m) % 1440; const h = Math.floor(m / 60), mm = m % 60;
+  return `${h % 12 || 12}:${String(mm).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+}
+function arrival(totalMin) {
+  const rq = plan.request;
+  return clockFromMinutes((rq.leave_now ? minutesNowIn(rq.tz) : rq.hour * 60) + totalMin);
+}
+const cityOf = (tz) => (tz || "").split("/").pop().replace(/_/g, " ");
 async function api(path, opts = {}) {
   const res = await fetch(path, { credentials: "same-origin", ...opts,
     headers: { ...(opts.body ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) } });
@@ -534,8 +564,10 @@ async function init() {
   for (const p of PLACES) BYKEY[p.key] = p;
   setPlace("from", landmarkPlace("ferry_building")); setPlace("to", landmarkPlace("coit_tower"));
   setPlace("cstart", landmarkPlace("washington_sq")); setPlace("cend", landmarkPlace("hayes_valley"));
-  $("hour").innerHTML = [...Array(24).keys()].map(h => `<option value="${h}">${h === sfHour() ? "Leave now" : "Leave at " + hourLabel(h)}</option>`).join("");
-  $("hour").value = sfHour();
+  $("hour").innerHTML = `<option value="now">Leave now</option>` +
+    [...Array(24).keys()].map(h => `<option value="${h}">Leave at ${hourLabel(h)}</option>`).join("");
+  $("hour").value = "now";
+  $("cities").innerHTML = CITIES.map(([n], i) => `<button type="button" data-city="${i}" aria-pressed="${i === 0}">${esc(n)}</button>`).join("");
   $("c-hour").innerHTML = [...Array(24).keys()].map(h => `<option value="${h}">${hourLabel(h)}</option>`).join(""); $("c-hour").value = 20;
   $("vibes").innerHTML = Object.entries(r.vibes).map(([k, label]) =>
     `<button type="button" data-vibe="${k}" aria-pressed="${k === vibe}" class="${k === vibe ? "on" : ""}">${esc(label)}</button>`).join("");
@@ -547,8 +579,7 @@ async function init() {
 }
 
 function syncPills() {
-  const h = +$("hour").value;
-  $("hour-label").textContent = h === sfHour() ? "Leave now" : `Leave at ${hourLabel(h)}`;
+  $("hour-label").textContent = $("hour").selectedOptions[0].textContent;
   $("weather-label").textContent = $("weather").selectedOptions[0].textContent;
   $("c-hour-label").textContent = `Start ${hourLabel(+$("c-hour").value)}`;
   $("c-stops-label").textContent = $("c-stops").selectedOptions[0].textContent;
@@ -574,7 +605,7 @@ function savedAsSuggestions(q) {
 function buildSuggestions(q) {
   const items = [];
   if (!q) {
-    items.push({ kind: "here", name: "Use my current location", address: "San Francisco only" });
+    items.push({ kind: "here", name: "Use my current location", address: "Works anywhere" });
     const saved = savedAsSuggestions("");
     if (saved.length) items.push({ group: "Saved places" }, ...saved);
     const rec = (me.user ? me.trips.map(t => t.destination) : readRecent().map(r => r.to))
@@ -629,11 +660,11 @@ function updateSuggest() {
   const seq = ++geoSeq, field = activeField;
   geoTimer = setTimeout(async () => {
     try {
-      const r = await api(`api/geocode?q=${encodeURIComponent(raw)}`);
+      const r = await api(`api/geocode?q=${encodeURIComponent(raw)}&lat=${searchCenter[0].toFixed(3)}&lon=${searchCenter[1].toFixed(3)}`);
       if (seq !== geoSeq || field !== activeField) return;
       suggestions = buildSuggestions(q);
       const adds = r.results.map(x => ({ kind: "pin", name: x.name, address: x.address, lat: x.lat, lon: x.lon, key: x.key }));
-      renderSuggest(adds, adds.length ? "" : "No San Francisco addresses match. Try a street name and number.");
+      renderSuggest(adds, adds.length ? "" : "No places match. Try a street and number, or add the city.");
     } catch (e) {
       if (seq === geoSeq) renderSuggest(null, "Address search is unavailable right now. Try a landmark.");
     }
@@ -917,10 +948,11 @@ function showLoading(title, sub, msg) {
 async function planTrip() {
   $("error").textContent = "";
   const query = $("q").value.trim();
-  if (!query && (!sel.from || !sel.to)) { $("error").textContent = "Choose a pickup and a destination."; return; }
+  if (!query && (!sel.from || !sel.to)) { $("error").textContent = "Search for a pickup and a destination."; return; }
   const body = {
     query, ...placeParams("origin", sel.from), ...placeParams("destination", sel.to),
-    hour: +$("hour").value, weather: $("weather").value, event: $("event").checked,
+    hour: $("hour").value === "now" ? "now" : +$("hour").value, near: searchCenter,
+    weather: $("weather").value, event: $("event").checked,
     avoid_steep: $("steep").checked, weight_kg: +$("kg").value,
     max_walk_leg_mi: +$("leg").value, max_total_walk_mi: +$("total").value,
     max_cost: $("budget").value === "" ? null : +$("budget").value, mode, weights: weights(),
@@ -943,7 +975,7 @@ async function planTrip() {
     setPlace("from", { ...data.places.origin, address: sel.from?.name === data.places.origin.name ? sel.from.address : "" });
     setPlace("to", { ...data.places.destination, address: sel.to?.name === data.places.destination.name ? sel.to.address : "" });
     pushRecent(sel.from, sel.to);
-    $("hour").value = rq.hour; $("weather").value = rq.weather; $("event").checked = rq.event; $("steep").checked = rq.avoid_steep;
+    $("hour").value = rq.leave_now ? "now" : rq.hour; $("weather").value = rq.weather; $("event").checked = rq.event; $("steep").checked = rq.avoid_steep;
     if (rq.max_cost != null) $("budget").value = rq.max_cost;
     if (rq.mode && rq.mode !== mode && MODE_WEIGHTS[rq.mode]) setMode(rq.mode, { rerank: false });
     syncPills(); renderPlan(true); renderRecent();
@@ -964,13 +996,17 @@ async function rerankNow() {
 function renderPlan(fresh) {
   const s = plan.stats, lv = plan.live;
   $("r-title").textContent = `${plan.origin_name} to ${plan.destination_name}`;
-  $("r-sub").textContent = `${plan.request.hour === sfHour() ? "Leaving now" : "Leaving at " + hourLabel(plan.request.hour)}. ${s.candidates} trips compared.`;
+  const zone = plan.request.region === "world" ? ` ${cityOf(plan.request.tz)} time` : "";
+  $("r-sub").textContent = `${plan.request.leave_now ? "Leaving now" : "Leaving at " + hourLabel(plan.request.hour) + zone}. ${s.candidates} trips compared.`;
   const w = lv.weather;
   const conds = [
     [w ? `${w.temp_f}°F, ${w.summary.toLowerCase()}` : lv.condition === "rain" ? "Rain" : lv.condition === "fog" ? "Fog" : "Clear", !!w],
     [lv.routes.startsWith("OSRM") ? "Street routes" : "Estimated routes", lv.routes.startsWith("OSRM")],
-    [lv.transit === "511 live" ? "Live arrivals" : "Scheduled arrivals", lv.transit === "511 live"],
+    plan.request.region === "world"
+      ? [lv.world_transit === "ok" ? "Transitous transit" : "Transit unavailable", lv.world_transit === "ok"]
+      : [lv.transit === "511 live" ? "Live arrivals" : "Scheduled arrivals", lv.transit === "511 live"],
   ];
+  if (/CityBikes live/.test(lv.bikes)) conds.push([lv.bikes.replace(/^CityBikes live \((.*)\)$/, "$1"), true]);
   if (s.llm) conds.push(["Claude agents", true]);
   $("conditions").innerHTML = conds.map(([t, on]) => `<span class="cond ${on ? "on" : ""}"><span class="dot"></span>${esc(t)}</span>`).join("");
   notice("r-notice", plan.notice);
@@ -986,7 +1022,7 @@ function splitLabel(label) {
 }
 
 function legDetail(l) {
-  const bits = [`${l.distance_mi} mi`, mins(l.minutes) + (l.wait_min ? `, ${Math.round(l.wait_min)} min wait` : "")];
+  const bits = [dist(l.distance_mi), mins(l.minutes) + (l.wait_min ? `, ${Math.round(l.wait_min)} min wait` : "")];
   if (l.cost) bits.push(`$${l.cost.toFixed(2)}`);
   if (l.surge > 1) bits.push(`${l.surge}× surge`);
   if (l.mode === "walk" && l.grade > 0.04) bits.push("uphill");
@@ -997,15 +1033,16 @@ function renderOptions(fresh) {
   $("results").innerHTML = options.map((o, i) => {
     const { title, tag } = splitLabel(o.label);
     const modesUsed = o.legs.map(l => l.mode);
-    const glyphs = modesUsed.slice(0, 2).map(m => `<span class="glyph" style="--c:var(--m-${m})">${icon(m)}</span>`).join("")
-      + (modesUsed.length > 2 ? `<span class="glyph more">+${modesUsed.length - 2}</span>` : "");
+    const glyphs = o.legs.filter(l => l.mode !== "walk" || o.legs.length === 1).concat(o.legs.length > 1 ? [] : []).slice(0, 2)
+      .map(l => `<span class="glyph" style="--c:${legColor(l)}">${icon(l.mode)}</span>`).join("")
+      + (o.legs.filter(l => l.mode !== "walk").length > 2 ? `<span class="glyph more">+${o.legs.filter(l => l.mode !== "walk").length - 2}</span>` : "");
     const summary = [...new Set(o.legs.map(l => MODE_NAMES[l.mode]))].join(", then ").replace(/, then ([^,]+)$/, " and $1");
     let detail = "";
     if (i === active) {
       const total = o.legs.reduce((a, l) => a + l.minutes + l.wait_min, 0) || 1;
-      const segs = o.legs.map(l => `<div class="seg ${l.mode}" style="--c:var(--m-${l.mode});flex:${Math.max((l.minutes + l.wait_min) / total, 0.12)}">
+      const segs = o.legs.map(l => `<div class="seg ${l.mode}" style="--c:${legColor(l)};flex:${Math.max((l.minutes + l.wait_min) / total, 0.12)}">
           <span class="lbl">${MODE_NAMES[l.mode]} ${Math.round(l.minutes + l.wait_min)}m</span><div class="bar"></div></div>`).join("");
-      const legs = o.legs.map(l => `<li style="--c:var(--m-${l.mode})"><span class="ldot"></span>
+      const legs = o.legs.map(l => `<li style="--c:${legColor(l)}"><span class="ldot"></span>
           <span><b>${MODE_NAMES[l.mode]}${l.line ? `, ${esc(l.line)}` : ""}</b> to ${esc(l.to_name)}<br>
           <span class="x">${esc(legDetail(l))}${l.note ? `. ${esc(l.note)}` : ""}</span></span></li>`).join("");
       detail = `<div class="detail">
@@ -1019,7 +1056,7 @@ function renderOptions(fresh) {
       <button class="opt-head" data-i="${i}" aria-pressed="${i === active}">
         <span class="glyphs">${glyphs}</span>
         <span><span class="opt-title">${esc(title)}</span><br>
-          <span class="opt-sub">Arrive <b>${arrival(o.total_min, plan.request.hour)}</b>, ${mins(o.total_min)}</span><br>
+          <span class="opt-sub">Arrive <b>${arrival(o.total_min)}</b>, ${mins(o.total_min)}</span><br>
           <span class="opt-sub">${esc(summary)}</span>${tag ? `<br><span class="tagline">${esc(tag)}</span>` : ""}</span>
         <span class="opt-price">${o.cost === 0 ? "Free" : "$" + o.cost.toFixed(2)}<small>${o.kcal} kcal</small></span>
       </button>${detail}</div>`;
@@ -1038,10 +1075,10 @@ function renderTrace() {
 const destIcon = () => L.divIcon({ className: "", html: '<div class="m-dest"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
 const origIcon = () => L.divIcon({ className: "", html: '<div class="m-orig"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
 
-function routeLine(path, m) {
+function routeLine(path, m, color) {
   const walk = m === "walk";
   L.polyline(path, { color: dark() ? "#16191c" : "#ffffff", weight: walk ? 8 : 10, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(layer);
-  L.polyline(path, { color: COLORS[m] === "#111827" && dark() ? "#f4f5f6" : COLORS[m], weight: walk ? 5 : 6, lineCap: "round",
+  L.polyline(path, { color: color || (COLORS[m] === "#111827" && dark() ? "#f4f5f6" : COLORS[m]), weight: walk ? 5 : 6, lineCap: "round",
     lineJoin: "round", dashArray: walk ? "1 9" : null }).addTo(layer);
 }
 
@@ -1062,7 +1099,7 @@ function drawTrip() {
   const o = options[active];
   if (!o) return;
   layer = L.featureGroup().addTo(map);
-  for (const l of o.legs) routeLine(l.path, l.mode);
+  for (const l of o.legs) routeLine(l.path, l.mode, l.color);
   let t = 0;
   o.legs.forEach((l, i) => {
     if (i > 0) {
@@ -1074,7 +1111,7 @@ function drawTrip() {
   });
   L.marker(o.legs[0].path[0], { icon: origIcon() }).bindTooltip(plan.origin_name).addTo(layer);
   L.marker(o.legs.at(-1).path.at(-1), { icon: destIcon() })
-    .bindTooltip(`Arrive ${arrival(o.total_min, plan.request.hour)}`, { permanent: true, direction: "top", offset: [0, -10], className: "eta" }).addTo(layer);
+    .bindTooltip(`Arrive ${arrival(o.total_min)}`, { permanent: true, direction: "top", offset: [0, -10], className: "eta" }).addTo(layer);
   frame(layer.getBounds());
 }
 
@@ -1104,7 +1141,7 @@ function renderCrawl(d) {
   crawlData = d;
   const it = d.itinerary, tot = it.totals;
   $("r-title").textContent = `${it.stops.length} bars from ${d.start_name}`;
-  $("r-sub").textContent = `${mins(tot.minutes)}, done by ${tot.ends}. ${tot.walk_mi} mi of walking.`;
+  $("r-sub").textContent = `${mins(tot.minutes)}, done by ${tot.ends}. ${dist(tot.walk_mi, d.units)} of walking.`;
   const w = d.weather;
   $("conditions").innerHTML = [
     [w ? `${w.temp_f}°F, ${w.summary.toLowerCase()}` : "Clear", !!w], [d.source, true], [`${d.bars_considered} bars considered`, true],
@@ -1112,7 +1149,7 @@ function renderCrawl(d) {
   const rows = [];
   it.stops.forEach((s, i) => {
     const hop = it.walks[i];
-    rows.push(`<div class="stop"><span class="n walk" aria-hidden="true"></span><div class="t" style="padding-top:4px">Walk ${hop.distance_mi} mi, about ${Math.round(hop.minutes)} min</div></div>`);
+    rows.push(`<div class="stop"><span class="n walk" aria-hidden="true"></span><div class="t" style="padding-top:4px">Walk ${dist(hop.distance_mi, d.units)}, about ${Math.round(hop.minutes)} min</div></div>`);
     const site = /^https?:\/\//i.test(s.website) ? ` <a href="${esc(s.website)}" target="_blank" rel="noopener noreferrer">Website</a>` : "";
     rows.push(`<div class="stop"><span class="n">${i + 1}</span><div><h3>${esc(s.name)}</h3>
       <div class="t">${esc(s.arrive)} to ${esc(s.leave)}</div><div class="t">${esc(s.why)}</div>
@@ -1121,7 +1158,7 @@ function renderCrawl(d) {
   if (it.ride_home) {
     const r = it.ride_home;
     rows.push(`<div class="stop last"><span class="n ride" aria-hidden="true"></span><div><h3>Ride home to ${esc(r.to_name)}</h3>
-      <div class="t">${r.distance_mi} mi, ${Math.round(r.minutes)} min plus ${r.wait_min} min pickup. $${r.cost.toFixed(2)}, simulated.</div></div></div>`);
+      <div class="t">${dist(r.distance_mi, d.units)}, ${Math.round(r.minutes)} min plus ${r.wait_min} min pickup. $${r.cost.toFixed(2)}, simulated.</div></div></div>`);
   } else rows[rows.length - 1] = rows[rows.length - 1].replace('class="stop"', 'class="stop last"');
   let html = `<div class="crawl">${rows.join("")}</div>`;
   if (it.notes.length) html += `<div class="flags">${it.notes.map(n => `<span>${esc(n)}</span>`).join("")}</div>`;
@@ -1157,7 +1194,7 @@ async function book() {
                summary: { label: title, minutes: o.total_min, cost: o.cost, kcal: o.kcal, modes: o.legs.map(l => l.mode) } };
     body = `<h3 id="modal-title">${ride ? "Ride booked" : "Trip saved"}</h3>
       <p>${ride ? `Your driver will meet you at <b>${esc(ride.frm_name)}</b> in about ${ride.wait_min} min.` : "No ride needed. Follow the steps on your trip."}</p>
-      <p class="fine">Arrive ${arrival(o.total_min, plan.request.hour)}, $${o.cost.toFixed(2)}, ${o.kcal} kcal, ${o.steps.toLocaleString()} steps.</p>`;
+      <p class="fine">Arrive ${arrival(o.total_min)}, $${o.cost.toFixed(2)}, ${o.kcal} kcal, ${o.steps.toLocaleString()} steps.</p>`;
   }
   let saved = "";
   if (me.user) {
@@ -1175,6 +1212,19 @@ $("cta").onclick = () => view === "plan" ? (mode === "barcrawl" ? planCrawl() : 
 $("q").addEventListener("keydown", e => { if (e.key === "Enter") planTrip(); });
 $("back").onclick = () => { showView("plan"); crawlData = null; };
 $("swap").onclick = () => { const f = sel.from; setPlace("from", sel.to); setPlace("to", f); };
+$("cities").addEventListener("click", e => {
+  const b = e.target.closest("[data-city]"); if (!b) return;
+  const [name, lat, lon] = CITIES[+b.dataset.city];
+  document.querySelectorAll("#cities button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  searchCenter = [lat, lon];
+  map.flyTo([lat, lon], 13, { duration: 0.8 });
+  $("popular").hidden = name !== "San Francisco";
+  if (name === "San Francisco") { setPlace("from", landmarkPlace("ferry_building")); setPlace("to", landmarkPlace("coit_tower")); return; }
+  // New city: search is biased to wherever the map is, so start fresh there.
+  setPlace("from", null); setPlace("to", null);
+  $("from-input").placeholder = `Pickup in ${name}`; $("to-input").placeholder = `Where to in ${name}?`;
+  $("from-input").focus();
+});
 $("places").addEventListener("click", e => {
   const b = e.target.closest("[data-place]");
   if (!b) return;

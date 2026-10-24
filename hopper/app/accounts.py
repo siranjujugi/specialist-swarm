@@ -141,8 +141,8 @@ def _place_point(p, field):
         lat, lon = float(p["lat"]), float(p["lon"])
     except (KeyError, TypeError, ValueError):
         raise ValueError(f"{field} needs a latitude and longitude.") from None
-    if not (37.55 <= lat <= 37.85 and -122.55 <= lon <= -122.33):
-        raise ValueError(f"{field} must be in San Francisco.")
+    if not (-85 <= lat <= 85 and -180 <= lon <= 180):
+        raise ValueError(f"{field} has an invalid location.")
     return {"name": str(p.get("name") or "Pinned location")[:80], "lat": round(lat, 6), "lon": round(lon, 6),
             "key": str(p.get("key") or "")[:40]}
 

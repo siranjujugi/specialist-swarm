@@ -11,10 +11,10 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import bikes, five11, geo, modes, osrm, tools, weather
+from . import bikes, five11, geo, modes, osrm, tools, weather, world
 from .data import BIKE_DOCKS, PLACES, TRANSIT_LINES
 from .live import FeedError
 
@@ -29,7 +29,7 @@ ROUTING_BUDGET_S = 8.0        # wall-clock cap on OSRM per plan
 def sf_hour():
     return datetime.now(SF_TZ).hour
 
-DEFAULTS = {"hour": 12, "weather": "live", "event": False, "weight_kg": 75,
+DEFAULTS = {"hour": "now", "weather": "live", "event": False, "weight_kg": 75,
             "weights": {"time": 1.0, "cost": 1.0, "health": 1.0},
             # Plans use the loosest Mode limits so every Mode can re-rank the cached trips.
             "max_walk_leg_mi": 2.0, "max_total_walk_mi": 3.0, "avoid_steep": False,
@@ -82,19 +82,22 @@ def match_place(text):
     return None
 
 
-def parse_intent_rules(query):
+def parse_intent_rules(query, sf_context=True):
     out = {}
     q = query.lower()
     m = re.search(r"from (.+?) to (.+?)(?:\s+(?:by|at|before|under|and|,|i |—|-)\s|[,.!?]|$)", q)
     if not m:
         m = re.search(r"^(.+?) to (.+?)(?:\s+(?:by|at|before|under|and)\s|[,.!?]|$)", q)
     if m:
-        out["origin"], out["destination"] = match_place(m.group(1)), match_place(m.group(2))
+        # Outside SF, never fuzzy-match onto SF landmarks ("King's Cross" ≠ "Van Ness") — geocode instead.
+        if sf_context:
+            out["origin"], out["destination"] = match_place(m.group(1)), match_place(m.group(2))
         out["origin_text"], out["destination_text"] = m.group(1).strip(), m.group(2).strip()
     elif " to " not in q:
         dest = re.search(r"(?:get me to|take me to|going to|go to)\s+(.+?)(?:\s+(?:by|at|under)\s|[,.!?]|$)", q)
         if dest:
-            out["destination"] = match_place(dest.group(1))
+            if sf_context:
+                out["destination"] = match_place(dest.group(1))
             out["destination_text"] = dest.group(1).strip()
     t = re.search(r"(?:by|at|before)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", q)
     if t:
@@ -162,9 +165,9 @@ INTENT_TOOL = {
 }
 
 
-def intent_agent(query, trace, client):
+def intent_agent(query, trace, client, sf_context=True):
     t0 = time.perf_counter()
-    rules = parse_intent_rules(query)
+    rules = parse_intent_rules(query, sf_context)
     if client is None:
         trace.log("Intent", "rules", (time.perf_counter() - t0) * 1000,
                   f"offline parser → {json.dumps(rules)}")
@@ -173,10 +176,12 @@ def intent_agent(query, trace, client):
     try:
         resp = client.messages.create(
             model=INTENT_MODEL, max_tokens=400,
-            system="You turn San Francisco trip requests into structured data. Use a catalog key "
-                   "only when the rider clearly means that landmark. For a street address or any "
-                   "other place, leave the key null and copy the rider's words into origin_text / "
-                   "destination_text so it can be geocoded. Catalog:\n" + catalog,
+            system="You turn city trip requests (any city worldwide) into structured data. The "
+                   "catalog below lists San Francisco landmarks only: use a catalog key only when the "
+                   "rider clearly means that SF landmark. For any other place — a street address, a "
+                   "landmark in another city, a station — leave the key null and copy the rider's "
+                   "words (including the city if they gave one) into origin_text / destination_text "
+                   "so it can be geocoded. Catalog:\n" + catalog,
             tools=[INTENT_TOOL], tool_choice={"type": "tool", "name": "trip_request"},
             messages=[{"role": "user", "content": query}])
         parsed = next(b.input for b in resp.content if b.type == "tool_use")
@@ -211,6 +216,11 @@ def ride_specialist(req):
     o, d, h, ev, kg = req["origin"], req["destination"], req["hour"], req["event"], req["weight_kg"]
     trips = [tools.Trip([tools.ride_leg(o, d, h, ev)], "Ride-hail")]
     pickups = _towards(o, d, geo.landmarks(), 0.8)[:4]       # walk ahead: shorter ride
+    if req.get("region") == "world":                         # no landmark list abroad: sample the walk
+        try:
+            pickups = world.pickup_points_along(o, d)
+        except FeedError:
+            pickups = []
     if tools.surge_at(o, h, ev)[0] > 1:             # walk out of the surge zone, any direction
         reach = req["max_walk_leg_mi"] / tools.WALK_CIRCUITY
         escapes = [p for p in tools.nearest(o, geo.landmarks(), reach)
@@ -303,8 +313,33 @@ def micromobility_specialist(req):
     return trips
 
 
-SPECIALISTS = {"Walk & Terrain": walk_specialist, "Ride-hail": ride_specialist,
-               "Transit": transit_specialist, "Micromobility": micromobility_specialist}
+def world_transit_specialist(req):
+    """Any city: Transitous itineraries (walk + metro/bus/tram/rail/ferry, real-time where published)."""
+    try:
+        return world.transit_trips(req["origin"], req["destination"], req["weight_kg"],
+                                   req["depart_at"], req["live_now"])
+    except FeedError as e:
+        req["_world_transit"] = f"unavailable ({e})"
+        return []
+
+
+def world_bikes_specialist(req):
+    """Any city with a bike-share network listed on CityBikes."""
+    try:
+        trips, network = world.bike_trips(req["origin"], req["destination"], req["hour"], req["weight_kg"])
+        req["_bike_source"] = f"CityBikes live ({network})" if network else "no bike share nearby"
+        return trips
+    except FeedError:
+        req["_bike_source"] = "CityBikes unavailable"
+        return []
+
+
+SF_SPECIALISTS = {"Walk & Terrain": walk_specialist, "Ride-hail": ride_specialist,
+                  "Transit": transit_specialist, "Micromobility": micromobility_specialist}
+WORLD_SPECIALISTS = {"Walk & Terrain": walk_specialist, "Ride-hail": ride_specialist,
+                     "Transit (Transitous)": world_transit_specialist,
+                     "Micromobility (CityBikes)": world_bikes_specialist}
+SPECIALISTS = SF_SPECIALISTS     # kept for callers that predate worldwide support
 
 
 # ── Context, Health, Critic, Ranker ──────────────────────────────────────────
@@ -315,14 +350,20 @@ def context_agent(req, trace):
     req["weather_detail"] = None
     if req["weather"] == "live":
         lat, lon = tools.latlon(req["origin"])
-        try:
-            w = weather.at(lat, lon, req["hour"])
-            req["weather"], req["weather_detail"] = w["condition"], w
-            notes.append(f"NWS {hour_label(req['hour'])}: {w['summary']}, {w['temp_f']}°F, "
-                         f"wind {w['wind_mph']} mph, rain {w['precip_pct']}% [{w['cache']}]")
-        except FeedError as e:
+        # NWS for US trips (more local), Open-Meteo everywhere else and as the fallback.
+        sources = ([("NWS", weather.at)] if geo.in_us(lat, lon) else []) + [("Open-Meteo", world.weather_at)]
+        for label, fetch in sources:
+            try:
+                w = fetch(lat, lon, req["hour"])
+                req["weather"], req["weather_detail"] = w["condition"], w
+                notes.append(f"{label} {hour_label(req['hour'])}: {w['summary']}, {w['temp_f']}°F, "
+                             f"wind {w['wind_mph']} mph, rain {w['precip_pct']}% [{w['cache']}]")
+                break
+            except (FeedError, KeyError, IndexError, TypeError, ValueError) as e:
+                notes.append(f"{label} unavailable ({type(e).__name__})")
+        else:
             req["weather"] = "clear"
-            notes.append(f"NWS unavailable ({e}) → assuming clear")
+            notes.append("no live weather → assuming clear")
     if (req["weather_detail"] or {}).get("wind_mph", 0) > 20:
         req["no_bikes"] = True
         notes.append("wind > 20 mph → bikes off")
@@ -347,6 +388,9 @@ def hour_label(h):
 def realtime_agent(trips, req, trace):
     """511 live arrivals replace schedule waits; 511 alerts flag affected trips."""
     t0 = time.perf_counter()
+    if req.get("region") == "world":
+        trace.log("Realtime", "rules", 0, "outside SF: live times come from Transitous where agencies publish them")
+        return "Transitous (live where published)"
     if not five11.enabled():
         trace.log("Realtime (511)", "fallback", 0,
                   "no FIVE11_API_KEY → schedule headways (get a free key at 511.org/open-data/token)")
@@ -631,8 +675,22 @@ def orchestrate(body):
         req["destination"] = geo.resolve(body.get("destination_place") or body.get("destination"))
     except ValueError as e:
         raise PlanError(str(e)) from None
+    # Bias free-text geocoding toward where the rider is looking (map centre) or their pickup.
+    near = None
+    try:
+        lat, lon = (float(x) for x in (body.get("near") or [])[:2])
+        near = [lat, lon] if -85 <= lat <= 85 and -180 <= lon <= 180 else None
+    except (TypeError, ValueError):
+        pass
+    if near is None and req.get("origin") in PLACES:
+        near = tools.latlon(req["origin"])
     if (body.get("query") or "").strip():
-        parsed = intent_agent(body["query"], trace, client)
+        sf_context = near is None or world.in_sf_area(*near)
+        parsed = intent_agent(body["query"], trace, client, sf_context)
+        if not sf_context:     # SF landmark keys make no sense for a London or Tokyo request
+            for k in ("origin", "destination"):
+                if parsed.get(k) in PLACES and not geo.is_geo(parsed[k]) and parsed.get(f"{k}_text"):
+                    parsed.pop(k)
         req.update({k: v for k, v in parsed.items() if k != "weights" and not k.endswith("_text")})
         if "weights" in parsed:
             req["weights"] = {**req["weights"], **parsed["weights"]}
@@ -642,7 +700,7 @@ def orchestrate(body):
             if text and k not in parsed:
                 t0 = time.perf_counter()
                 try:
-                    key = geo.geocode_first(text)
+                    key = geo.geocode_first(text, near=near)
                 except ValueError:
                     key = None
                 trace.log("Geocoder (Photon)", "tools", (time.perf_counter() - t0) * 1000,
@@ -663,15 +721,27 @@ def orchestrate(body):
             raise PlanError(f"{tools.name(req[k])} is outside San Francisco — SF only for now.")
     if req["origin"] == req["destination"]:
         raise PlanError("Origin and destination are the same place.")
-    req["hour"] = int(req["hour"]) % 24
-    req["live_now"] = req["hour"] == sf_hour()   # live arrivals/docks only make sense for "now"
+    span = tools.haversine_mi(req["origin"], req["destination"])
+    if span > 100:
+        raise PlanError(f"Those places are {span:,.0f} miles apart. Hopper plans trips within a city or metro area.")
+    req["region"] = world.region(req["origin"], req["destination"])
+    # Times are local to where the trip starts (SF, Paris, Tokyo…), not to the server.
+    req["tz"] = world.timezone_at(*tools.latlon(req["origin"]))
+    now_local = world.local_now(req["tz"])
+    leave_now = req["hour"] in (None, "", "now") or int(req["hour"]) % 24 == now_local.hour
+    req["hour"] = now_local.hour if leave_now else int(req["hour"]) % 24
+    depart = now_local if leave_now else now_local.replace(hour=req["hour"], minute=0, second=0, microsecond=0)
+    if not leave_now and depart < now_local:
+        depart += timedelta(days=1)
+    req["depart_at"], req["live_now"] = depart, leave_now   # live arrivals/docks only for "now"
     weather_input = req["weather"]
 
     req = context_agent(req, trace)
 
     t0 = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=len(SPECIALISTS)) as pool:
-        futures = {n: pool.submit(fn, req) for n, fn in SPECIALISTS.items()}
+    specialists = WORLD_SPECIALISTS if req["region"] == "world" else SF_SPECIALISTS
+    with ThreadPoolExecutor(max_workers=len(specialists)) as pool:
+        futures = {n: pool.submit(fn, req) for n, fn in specialists.items()}
         results = {n: f.result() for n, f in futures.items()}
     fan_ms = (time.perf_counter() - t0) * 1000
     for n, trips in results.items():
@@ -707,11 +777,14 @@ def orchestrate(body):
         "request": {**{k: req[k] for k in ("origin", "destination", "hour", "event", "mode",
                                            "weights", "max_walk_leg_mi", "max_total_walk_mi",
                                            "avoid_steep", "max_cost", "weight_kg")},
-                    "weather": weather_input},
+                    "weather": weather_input, "tz": req["tz"], "leave_now": req["live_now"],
+                    "region": req["region"]},
+        "units": "mi" if req["tz"].startswith("America/") or req["tz"] in ("Europe/London", "Europe/Dublin") else "km",
         "notice": notice,
         "live": {"weather": req["weather_detail"], "condition": req["weather"],
                  "transit": transit_source, "routes": routes_source,
                  "bikes": req.get("_bike_source", "not used"),
+                 "world_transit": req.get("_world_transit", "ok" if req["region"] == "world" else "not used"),
                  "five11": five11.status(), "live_now": req["live_now"]},
         "origin_name": tools.name(req["origin"]), "destination_name": tools.name(req["destination"]),
         "places": {k: {"key": req[k], "name": tools.name(req[k]), "lat": tools.latlon(req[k])[0],

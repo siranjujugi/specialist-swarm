@@ -263,8 +263,22 @@ def build_itinerary(route, start_key, end_key, hour, minutes_per_stop, event, kg
             "notes": notes}
 
 
+def load_bars_near(lat, lon):
+    """SF: bundled snapshot / cached citywide data. Elsewhere: live Overpass around the start."""
+    from . import world
+    if world.in_sf_area(lat, lon):
+        return load_bars()
+    try:
+        elements, cache = world.bars_near(lat, lon, radius_m=1800)
+    except FeedError as e:
+        return [], f"unavailable ({e})"
+    return _compact(elements), f"OpenStreetMap live ({cache})"
+
+
 def plan_crawl(start_key, end_key, stops, vibe, hour, minutes_per_stop, weather_condition, event, kg):
-    bars, source = load_bars()
+    bars, source = load_bars_near(*tools.latlon(start_key))
+    if not bars:
+        return None, source
     hop_mi = 0.2 if weather_condition == "rain" else 0.4      # straight-line ≈ 0.25 / 0.5 mi walked
     best, alt = choose_stops(bars, tools.latlon(start_key), stops, vibe, hop_mi)
     if not best:
