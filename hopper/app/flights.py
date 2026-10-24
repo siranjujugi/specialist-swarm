@@ -14,7 +14,8 @@ from pathlib import Path
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from . import tools
+from . import duffel, tools
+from .live import FeedError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "airports.json"
 _AIRPORTS = None
@@ -152,9 +153,64 @@ def plan(origin_key, dest_key, date, hour, weight_kg, plan_fn, tz_origin, tz_des
             "links": links(a["iata"], b["iata"], date),
         })
     # Broke ranks by price, Hustle/Burn by door-to-door time.
-    options.sort(key=(lambda x: (x["total_low"], x["total_min"])) if mode == "broke"
-                 else (lambda x: (x["total_min"], x["total_low"])))
-    return {"options": options[:3], "error": None}
+    rank = (lambda x: (x["total_low"], x["total_min"])) if mode == "broke" else (lambda x: (x["total_min"], x["total_low"]))
+    options.sort(key=rank)
+
+    if not duffel.enabled():
+        return {"options": options[:3], "error": None, "fares_source": "estimate",
+                "fares_note": "Estimated from distance. Add a Duffel API key for real flight offers."}
+    real, problems = _real_offers(options[:3], date)
+    if not real:
+        return {"options": options[:3], "error": None, "fares_source": "estimate",
+                "fares_note": f"Live fares unavailable ({problems or 'no offers for this date'}), so these are estimates."}
+    real.sort(key=rank)
+    return {"options": real[:4], "error": None,
+            "fares_source": "duffel_test" if duffel.test_mode() else "duffel_live",
+            "fares_note": ("Duffel test mode: sample airline data, not bookable fares." if duffel.test_mode()
+                           else "Live fares from Duffel. Offers expire in about 30 minutes.")}
+
+
+def _clock(dt):
+    return dt.strftime("%-I:%M %p").lower()
+
+
+def _real_offers(estimates, date):
+    """Swap estimates for real Duffel offers (cheapest + fastest per airport pair).
+    Door-to-door times use the real departure and arrival times."""
+    def fetch(opt):
+        try:
+            return opt, duffel.search(opt["dep"]["iata"], opt["arr"]["iata"], date.isoformat())[0], None
+        except FeedError as e:
+            return opt, [], str(e)
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(fetch, estimates))
+    real, problems = [], sorted({err for _, _, err in results if err})
+    for est, offers, _ in results:
+        if not offers:
+            continue
+        picks = {offers[0]["id"]: offers[0]}                                  # cheapest
+        fastest = min(offers, key=lambda x: x["duration_min"] or 9999)
+        picks.setdefault(fastest["id"], fastest)
+        for off in picks.values():
+            g1, g2, f = est["ground_to"], est["ground_from"], est["flight"]
+            g1_min = g1["minutes"] if g1["ok"] else 60
+            g2_min = g2["minutes"] if g2["ok"] else 60
+            dep = datetime.fromisoformat(off["departing_at"])
+            arr = datetime.fromisoformat(off["arriving_at"])
+            ground_cost = (g1.get("cost") or 0) + (g2.get("cost") or 0)
+            usd = off["currency"] == "USD"
+            leave_home = dep - timedelta(minutes=f["buffer_before"] + g1_min)
+            at_door = arr + timedelta(minutes=f["buffer_after"] + g2_min)
+            real.append({**est, "offer": {**off, "leave_by": _clock(leave_home), "at_door": _clock(at_door),
+                                          "dep_local": _clock(dep), "arr_local": _clock(arr),
+                                          "arrives_next_day": arr.date() > dep.date()},
+                         "total_min": round(g1_min + f["buffer_before"] + (off["duration_min"] or f["minutes"])
+                                            + f["buffer_after"] + g2_min),
+                         "total_low": round(off["price"] + (ground_cost if usd else 0)),
+                         "total_high": round(off["price"] + (ground_cost if usd else 0)),
+                         "price_currency": off["currency"]})
+    return real, "; ".join(problems)
 
 
 def far_apart(origin_key, dest_key, miles=100):

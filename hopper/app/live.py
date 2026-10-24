@@ -10,6 +10,7 @@ import json
 import os
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import deque
@@ -52,6 +53,45 @@ class Budget:
 
 def offline():
     return os.environ.get("HOPPER_OFFLINE") == "1"
+
+
+def post_json(url, payload, headers=None, ttl=0, cache_key=None, timeout=30):
+    """POST JSON → (data, meta). Optional in-memory cache by `cache_key` (never includes
+    secrets). HTTP errors raise FeedError with the API's own error title when it has one."""
+    if offline():
+        raise FeedError("offline mode")
+    now = time.time()
+    if cache_key and ttl:
+        with _lock:
+            hit = _mem.get(("POST", cache_key))
+        if hit and now - hit[0] < ttl:
+            return hit[1], {"cache": "memory"}
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST",
+                                 headers={"User-Agent": USER_AGENT, "Accept": "application/json",
+                                          "Content-Type": "application/json", "Accept-Encoding": "gzip",
+                                          **(headers or {})})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read()
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        if raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        try:
+            errs = json.loads(raw.decode("utf-8-sig")).get("errors") or []
+            detail = errs[0].get("title") or errs[0].get("message") if errs else ""
+        except (ValueError, AttributeError):
+            detail = ""
+        raise FeedError(f"HTTP {e.code}{': ' + detail if detail else ''}"[:160]) from None
+    except Exception as e:  # noqa: BLE001 — network failures degrade to a fallback
+        raise FeedError(f"{type(e).__name__}: {e}"[:160]) from None
+    if body[:2] == b"\x1f\x8b":
+        body = gzip.decompress(body)
+    data = json.loads(body.decode("utf-8-sig"))
+    if cache_key and ttl:
+        with _lock:
+            _mem[("POST", cache_key)] = (now, data)
+    return data, {"cache": "live"}
 
 
 def get_json(url, params=None, ttl=60, disk_ttl=None, budget=None, timeout=12, redact=(),

@@ -36,10 +36,18 @@ Trips over ~100 miles switch to flights instead of failing:
   to SFO in Broke, a ride in Hustle) + check-in buffer (90 min domestic / 150 international)
   + flight + arrival buffer (25 / 50) + ground trip from the airport. Hustle/Burn rank by
   door-to-door time, Broke by price.
-- **Flight times and fares are estimates** from great-circle distance — there's no free
-  schedule/fare source. Every option links to **Google Flights, Skyscanner, and Kayak**
-  prefilled with the airports and date. For real fares and booking, plug in a flight API
-  (e.g. Duffel or Amadeus) behind `app/flights.py`.
+- **Real offers with Duffel**: put `DUFFEL_API_KEY` in `hopper/.env` (Duffel dashboard →
+  Developers → Access tokens). Hopper queries the 3 most promising airport pairs in parallel
+  (one-way, 1 adult, economy, ≤ 1 connection; cached 10 min) and shows the cheapest and
+  fastest offer per pair: airline, flight numbers, local departure/arrival times, stops, and
+  the real price in its currency, plus "Leave home by …, at your door by …" computed from the
+  real departure time. A `duffel_test_…` key returns Duffel's sandbox airline and is labelled
+  "Duffel test mode". The key is only read server-side and never logged, cached by, or sent
+  to the browser (tested). Selecting an offer saves it to trip history; actual booking needs
+  passenger details and payment, which Hopper doesn't collect.
+- **Without a key (or if Duffel fails)** flight times and fares are estimates from
+  great-circle distance, and the UI says so ("Estimated fares"). Every option links to
+  **Google Flights, Skyscanner, and Kayak** prefilled with the airports and date.
 
 ## Worldwide
 

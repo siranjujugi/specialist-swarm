@@ -101,7 +101,7 @@ def flight_options():
     return jsonify({**out, "date": date.isoformat(), "hour": hour,
                     "origin_name": tools.name(origin), "destination_name": tools.name(dest),
                     "miles": round(tools.haversine_mi(origin, dest)),
-                    "note": "Flight times and fares are estimates from distance. Check live fares before you book."})
+                    "note": out.get("fares_note") or "Flight times and fares are estimates. Check live fares before you book."})
 
 
 @app.get("/api/reverse")

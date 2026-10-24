@@ -298,6 +298,11 @@
   .date-pill { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 18px; background: var(--surface);
                font-size: 14px; font-weight: 500; margin-top: 12px; }
   .date-pill input { border: 0; background: transparent; font: inherit; color: inherit; }
+  .airline { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 14px; font-weight: 600; }
+  .airline img { width: 22px; height: 22px; border-radius: 4px; background: #fff; }
+  .door { margin-top: 6px; font-size: 14px; }
+  .door b { font-weight: 700; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--orange-wash); color: var(--ink); }
   .plane { width: 30px; height: 30px; border-radius: 50%; background: #000; color: #fff; display: grid; place-items: center;
            font: 700 11px/1 var(--display); border: 2px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .4); }
 
@@ -935,7 +940,9 @@ function updateCta() {
   if (view === "plan") { cta.textContent = mode === "barcrawl" ? "Plan my crawl" : "See trips"; return; }
   if (flightData) {
     const f = flightData.options[activeFlight];
-    cta.textContent = f ? `Check fares for ${f.dep.iata} to ${f.arr.iata}` : "Finding flights…"; cta.disabled = !f;
+    cta.textContent = !f ? "Finding flights…" : f.offer ? `Select ${f.offer.airline} for ${money(f.offer.price, f.offer.currency)}`
+                                                        : `Check fares for ${f.dep.iata} to ${f.arr.iata}`;
+    cta.disabled = !f;
     return;
   }
   if (crawlData) {
@@ -1266,6 +1273,8 @@ function tomorrowIn(tz) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 const hm = (m) => `${Math.floor(m / 60)} hr${m % 60 ? ` ${m % 60} min` : ""}`;
+const money = (v, cur = "USD") => { try { return new Intl.NumberFormat("en-US", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(v); } catch { return `${cur} ${Math.round(v)}`; } };
+const stopsText = (off) => off.stops === 0 ? "Nonstop" : `${off.stops} stop${off.stops > 1 ? "s" : ""} via ${off.via.join(", ")}`;
 async function planFlights(info, date) {
   const body = { ...placeParams("origin", sel.from), ...placeParams("destination", sel.to), date: date || tomorrowIn(),
                  hour: 9, mode: MODE_WEIGHTS[mode] ? mode : "hustle", weight_kg: +$("kg").value };
@@ -1281,20 +1290,27 @@ function renderFlights() {
   const d = flightData;
   $("r-title").textContent = `${d.origin_name} to ${d.destination_name}`;
   $("r-sub").textContent = `${d.miles.toLocaleString()} mi apart, so here's how to fly, door to door.`;
-  $("conditions").innerHTML = `<label class="date-pill">${icon("clock")}<input type="date" id="fl-date" value="${esc(d.date)}" aria-label="Travel date"></label>`;
+  const src = { duffel_live: ["Live fares (Duffel)", true], duffel_test: ["Duffel test mode", true], estimate: ["Estimated fares", false] }[d.fares_source] || ["Estimated fares", false];
+  $("conditions").innerHTML = `<label class="date-pill">${icon("clock")}<input type="date" id="fl-date" value="${esc(d.date)}" aria-label="Travel date"></label>
+    <span class="cond ${src[1] ? "on" : ""}" style="margin-top:12px"><span class="dot"></span>${esc(src[0])}</span>`;
   notice("r-notice", d.note);
   $("trace-box").hidden = true; $("rej-box").hidden = true;
   const step = (ico, text, right) => `<li><span class="ic2">${icon(ico)}</span><span>${text}</span><span class="r">${right}</span></li>`;
   $("results").innerHTML = d.options.map((o, i) => {
-    const g1 = o.ground_to, g2 = o.ground_from, f = o.flight;
+    const g1 = o.ground_to, g2 = o.ground_from, f = o.flight, off = o.offer;
+    const priceTxt = off ? money(off.price, off.currency) : `$${o.total_low}–${o.total_high}`;
     return `<div class="fl ${i === activeFlight ? "active" : ""}" data-fl="${i}" tabindex="0" role="button" aria-pressed="${i === activeFlight}">
-      <div class="fl-head"><span class="codes">${esc(o.dep.iata)} to ${esc(o.arr.iata)}</span><span class="price">$${o.total_low}–${o.total_high}</span></div>
-      <div class="sub">${esc(o.dep.name)} to ${esc(o.arr.name)}</div>
-      <div class="sub"><b style="color:var(--ink)">${hm(o.total_min)}</b> door to door${f.international ? ", international" : ""}</div>
+      <div class="fl-head"><span class="codes">${esc(o.dep.iata)} to ${esc(o.arr.iata)}</span><span class="price">${priceTxt}</span></div>
+      ${off ? `<div class="airline">${/^https:\/\//.test(off.logo) ? `<img src="${esc(off.logo)}" alt="">` : ""}${esc(off.airline)}, ${esc(off.flight_numbers.join(" + "))}</div>
+        <div class="sub">${esc(off.dep_local)} to ${esc(off.arr_local)}${off.arrives_next_day ? " (next day)" : ""}, ${esc(stopsText(off))}</div>
+        <div class="door">Leave home by <b>${esc(off.leave_by)}</b>, at your door by <b>${esc(off.at_door)}</b> (${hm(o.total_min)})</div>`
+      : `<div class="sub">${esc(o.dep.name)} to ${esc(o.arr.name)}</div>
+        <div class="sub"><b style="color:var(--ink)">${hm(o.total_min)}</b> door to door${f.international ? ", international" : ""}</div>`}
       <ul class="steps">
         ${step(g1.ok ? (g1.legs?.find(l => l.mode !== "walk")?.mode || "walk") : "ride", `To ${esc(o.dep.iata)}: ${esc(g1.ok ? g1.summary : "plan your own way")}`, g1.ok ? `${g1.minutes} min, $${g1.cost.toFixed(2)}` : "about 1 hr")}
         ${step("clock", `Check-in and security`, `${f.buffer_before} min`)}
-        ${step("plane", `Flight, ${f.km.toLocaleString()} km`, `about ${hm(f.minutes)}, $${f.fare_low}–${f.fare_high}`)}
+        ${off ? step("plane", `${esc(off.airline)} ${esc(off.flight_numbers[0])}${off.stops ? ` + ${off.stops} more` : ""}`, `${hm(off.duration_min || f.minutes)}, ${money(off.price, off.currency)}`)
+              : step("plane", `Flight, ${f.km.toLocaleString()} km`, `about ${hm(f.minutes)}, $${f.fare_low}–${f.fare_high}`)}
         ${step("clock", f.international ? "Deplane, passport control" : "Deplane", `${f.buffer_after} min`)}
         ${step(g2.ok ? (g2.legs?.find(l => l.mode !== "walk")?.mode || "walk") : "ride", `From ${esc(o.arr.iata)}: ${esc(g2.ok ? g2.summary : "plan your own way")}`, g2.ok ? `${g2.minutes} min, $${g2.cost.toFixed(2)}` : "about 1 hr")}
       </ul>
@@ -1321,6 +1337,32 @@ function drawFlight() {
   L.marker([sel.from.lat, sel.from.lon], { icon: origIcon() }).bindTooltip(sel.from.name).addTo(layer);
   L.marker([sel.to.lat, sel.to.lon], { icon: destIcon() }).bindTooltip(sel.to.name).addTo(layer);
   frame(layer.getBounds());
+}
+
+async function selectFlight(o) {
+  const off = o.offer, test = flightData.fares_source === "duffel_test";
+  let saved = "";
+  if (me.user) {
+    try {
+      await refreshMe(await api("api/me/trips", { method: "POST", body: JSON.stringify({
+        origin: { name: sel.from.name, lat: sel.from.lat, lon: sel.from.lon },
+        destination: { name: sel.to.name, lat: sel.to.lat, lon: sel.to.lon }, mode: MODE_WEIGHTS[mode] ? mode : "hustle",
+        summary: { label: `Flight ${off.flight_numbers.join(" + ")}, ${o.dep.iata} to ${o.arr.iata}`, minutes: o.total_min,
+                   cost: off.currency === "USD" ? off.price : 0, kcal: 0, modes: ["ride", "flight"], kind: "trip" } }) }));
+      saved = `<p class="fine">Saved to your trips.</p>`;
+    } catch (e) { saved = `<p class="error">${esc(e.message)}</p>`; }
+  }
+  openModal(`${closeBtn}<h3 id="modal-title">${esc(off.airline)} ${esc(off.flight_numbers.join(" + "))}</h3>
+    ${test ? `<p><span class="badge">Duffel test mode: sample data</span></p>` : ""}
+    <p>${esc(o.dep.iata)} ${esc(off.dep_local)} to ${esc(o.arr.iata)} ${esc(off.arr_local)}${off.arrives_next_day ? " (next day)" : ""}, ${esc(stopsText(off))}.<br>
+      <b>${money(off.price, off.currency)}</b> per adult, economy.</p>
+    <p>Leave home by <b>${esc(off.leave_by)}</b>: ${esc(o.ground_to.ok ? o.ground_to.summary : "your own way")} to ${esc(o.dep.iata)}. You'll be at ${esc(sel.to.name)} around <b>${esc(off.at_door)}</b>.</p>
+    <p class="fine">Booking needs passenger details and payment, which Hopper doesn't collect yet. This offer ${off.expires_at ? `expires at ${esc(new Date(off.expires_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }))}` : "expires soon"}.</p>
+    ${saved}
+    <div class="fare-links"><a href="${esc(o.links.google_flights)}" target="_blank" rel="noopener noreferrer">Google Flights</a>
+      <a href="${esc(o.links.skyscanner)}" target="_blank" rel="noopener noreferrer">Skyscanner</a>
+      <a href="${esc(o.links.kayak)}" target="_blank" rel="noopener noreferrer">Kayak</a></div>
+    <button class="cta" type="button" data-close style="margin-top:14px">Done</button>`);
 }
 
 // ── Booking (demo) — saved to trip history when signed in ────────────────────
@@ -1362,7 +1404,12 @@ async function book() {
 // ── Events ───────────────────────────────────────────────────────────────────
 $("cta").onclick = () => {
   if (view === "plan") return mode === "barcrawl" ? planCrawl() : planTrip();
-  if (flightData) { const f = flightData.options[activeFlight]; if (f) window.open(f.links.google_flights, "_blank", "noopener"); return; }
+  if (flightData) {
+    const f = flightData.options[activeFlight];
+    if (f?.offer) return selectFlight(f);
+    if (f) window.open(f.links.google_flights, "_blank", "noopener");
+    return;
+  }
   if (!crawlData && options[active]?.legs.some(l => l.mode === "ride")) return openRideChooser();
   book();
 };
