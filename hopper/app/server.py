@@ -1,12 +1,14 @@
 """Hopper Flask server: /api/plan runs the swarm, /api/rerank re-runs only the Ranker,
 /api/crawl plans a Bar Crawl."""
+import base64
+import hashlib
 import os
 from datetime import datetime, timedelta
 import uuid
 from collections import OrderedDict
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, g, jsonify, request, send_from_directory
 
 
 def load_dotenv(path=Path(__file__).resolve().parent.parent / ".env"):
@@ -21,7 +23,7 @@ def load_dotenv(path=Path(__file__).resolve().parent.parent / ".env"):
 
 load_dotenv()
 
-from . import accounts, bars, flights, geo, rides, tools, weather, world  # noqa: E402 — needs env loaded first
+from . import accounts, bars, flights, geo, guard, rides, tools, weather, world  # noqa: E402 — needs env loaded first
 from .agents import PlanError, orchestrate, rerank  # noqa: E402
 from .data import MODE_COLORS, PLACES  # noqa: E402
 from .live import FeedError  # noqa: E402
@@ -29,8 +31,75 @@ from .modes import MODES  # noqa: E402
 
 STATIC = Path(__file__).parent / "static"
 app = Flask(__name__, static_folder=str(STATIC))
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024          # no endpoint needs more than a few KB
 accounts.init_app(app)
 PLANS = OrderedDict()   # plan_id → (feasible trips, explanations, baseline, caps); small LRU
+
+
+def _inline_script_hash():
+    """CSP hash of index.html's one inline <script>, so CSP needs no 'unsafe-inline' for scripts."""
+    html = (STATIC / "index.html").read_text()
+    script = html.split("<script>")[-1].split("</script>")[0]
+    return "sha256-" + base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+
+
+CSP = "; ".join([
+    "default-src 'self'",
+    f"script-src 'self' https://unpkg.com '{_inline_script_hash()}'",
+    "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com",   # style="" attrs
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https://tiles.openfreemap.org https://server.arcgisonline.com https://assets.duffel.com",
+    "connect-src 'self' https://tiles.openfreemap.org",
+    "worker-src 'self' blob:",
+    "child-src blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
+
+def clean_body():
+    """The request's JSON object with internal flags removed — keys starting with "_" are
+    set only by the server (e.g. _quick, _visitor), never by the browser."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return {}
+    return {k: v for k, v in body.items() if not str(k).startswith("_")}
+
+
+@app.before_request
+def rate_limit():
+    g.visitor = guard.visitor_id(request)
+    group = guard.group_for(request.path, request.method)
+    if group:
+        wait = guard.check(group, g.visitor)
+        if wait:
+            resp = jsonify({"error": f"You're going a bit fast. Try again in {wait} seconds."})
+            resp.status_code = 429
+            resp.headers["Retry-After"] = str(wait)
+            return resp
+    return None
+
+
+@app.after_request
+def security_headers(resp):
+    resp.headers.setdefault("Content-Security-Policy", CSP)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Permissions-Policy"] = "geolocation=(self), camera=(), microphone=(), payment=()"
+    resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    if request.is_secure:
+        resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if request.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.errorhandler(413)
+def too_large(_e):
+    return jsonify({"error": "That request is too large."}), 413
 
 
 @app.get("/api/geocode")
@@ -53,7 +122,7 @@ def geocode():
 @app.post("/api/ride-options")
 def ride_options():
     """Ride types (simulated fares / ETAs / availability) for one ride leg + Uber/Lyft links."""
-    body = request.get_json(silent=True) or {}
+    body = clean_body()
     leg = body.get("leg") or {}
     try:
         path = [[float(p[0]), float(p[1])] for p in (leg.get("path") or [])[:1] + (leg.get("path") or [])[-1:]]
@@ -74,7 +143,7 @@ def ride_options():
 @app.post("/api/flights")
 def flight_options():
     """Door-to-door options with a flight: ground → airport → flight (estimate) → ground."""
-    body = request.get_json(silent=True) or {}
+    body = clean_body()
     try:
         origin = geo.resolve(body.get("origin_place") or body.get("origin"))
         dest = geo.resolve(body.get("destination_place") or body.get("destination"))
@@ -137,7 +206,7 @@ def places():
 @app.post("/api/plan")
 def plan():
     try:
-        result, feasible, why, baseline, caps = orchestrate(request.get_json(force=True) or {})
+        result, feasible, why, baseline, caps = orchestrate({**clean_body(), "_visitor": g.visitor})
     except PlanError as e:
         return jsonify({"error": str(e)}), 422
     if result.get("redirect"):
@@ -151,7 +220,7 @@ def plan():
 
 @app.post("/api/rerank")
 def rerank_plan():
-    body = request.get_json(force=True) or {}
+    body = clean_body()
     cached = PLANS.get(body.get("plan_id"))
     if not cached:
         return jsonify({"error": "Plan expired — search again."}), 404
@@ -164,7 +233,7 @@ def rerank_plan():
 
 @app.post("/api/crawl")
 def crawl():
-    body = request.get_json(force=True) or {}
+    body = clean_body()
     if body.get("age_confirmed") is not True:
         return jsonify({"error": "Bar Crawl is 21+. Please confirm your age."}), 403
     try:

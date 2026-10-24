@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import bikes, five11, geo, modes, osrm, tools, weather, world
+from . import bikes, five11, geo, guard, modes, osrm, tools, weather, world
 from .data import BIKE_DOCKS, PLACES, TRANSIT_LINES
 from .live import FeedError
 
@@ -667,6 +667,11 @@ def orchestrate(body):
     """Full swarm run. Returns the response dict plus the raw trips for re-ranking."""
     trace = Trace()
     client = None if body.get("_quick") else _llm()     # ground legs for flights skip Claude
+    # Cost guard: a plan makes up to 2 Claude calls (Intent + Explainer). Past the daily
+    # caps, fall back to rules + templates — every number stays identical.
+    if client is not None and not guard.claude_allowed(body.get("_visitor") or "local", calls=2):
+        client = None
+        trace.log("Cost guard", "rules", 0, "daily Claude budget reached → rules + templates (same numbers)")
     t_start = time.perf_counter()
 
     req = {**DEFAULTS, **{k: v for k, v in body.items() if v not in (None, "") and k in DEFAULTS},

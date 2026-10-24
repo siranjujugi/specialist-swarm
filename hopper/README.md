@@ -15,6 +15,32 @@ Open http://localhost:5080. With `ANTHROPIC_API_KEY` set, the Intent and Explain
 use Claude (`claude-haiku-5-5`); without it (or with `HOPPER_OFFLINE=1`) they fall back to
 a rule parser and templates. Every number is identical in both modes.
 
+## Abuse protection and cost control
+
+- **Per-visitor rate limits** (sliding windows; HTTP 429 + `Retry-After` when exceeded):
+
+  | Endpoint | Limit |
+  |---|---|
+  | `/api/plan` | 20 / min, 200 / hour |
+  | `/api/flights` | 5 / min, 30 / hour |
+  | `/api/crawl` | 10 / min, 60 / hour |
+  | sign-in / sign-up | 10 / min, 60 / hour per IP (plus the 5-failures-per-email lockout) |
+  | `/api/rerank`, `/api/ride-options`, search, account changes | 60–120 / min |
+
+  The visitor is the connection's IP; `X-Forwarded-For` is trusted only with
+  `HOPPER_TRUST_PROXY=1` (set it only behind a proxy you control).
+- **Claude budget**: `HOPPER_CLAUDE_DAILY_CAP` (default 400 calls/day for the whole app) and
+  `HOPPER_CLAUDE_VISITOR_DAILY_CAP` (default 40/visitor). Past either, plans silently use the
+  rules + templates fallback — same numbers — and the agent trace says "Cost guard".
+- **Security headers** on every response: a strict Content-Security-Policy (the page's one
+  inline script is allowed by its SHA-256 hash, computed at startup; only unpkg, Google Fonts,
+  OpenFreeMap, Esri, and Duffel logo hosts are allowed), `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY` + `frame-ancestors 'none'`, `Referrer-Policy`, `Permissions-Policy`,
+  `Cross-Origin-Opener-Policy`, HSTS over HTTPS, and `Cache-Control: no-store` on the API.
+- **Hardening**: 64 KB request-body cap; internal flags (keys starting with `_`, e.g.
+  `_quick`, `_visitor`) are stripped from browser requests.
+- Counters are in memory per process (fine for this prototype; use Redis for several instances).
+
 ## Choosing a ride
 
 When the selected trip includes a ride, "Choose a ride" opens a ride chooser: Go, Shared,
