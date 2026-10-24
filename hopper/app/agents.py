@@ -64,6 +64,18 @@ ALIASES = {"giants": "oracle_park", "ballpark": "oracle_park", "warriors": "chas
            "financial district": "montgomery", "ggp": "golden_gate_park", "de young": "golden_gate_park"}
 
 
+def alias_place(text):
+    """Landmark key when the words contain one of our curated ALIASES as a whole word —
+    local slang Claude can misread ("FiDi" isn't the Ferry Building). Addresses don't count."""
+    t = text.lower()
+    if re.search(r"\d", t):
+        return None
+    for alias, key in ALIASES.items():
+        if re.search(rf"\b{re.escape(alias)}\b", t):
+            return key
+    return None
+
+
 def match_place(text):
     t = text.lower().strip(" .,!?")
     for alias, key in ALIASES.items():
@@ -188,8 +200,15 @@ def intent_agent(query, trace, client, sf_context=True):
         parsed = {k: v for k, v in parsed.items() if v is not None and
                   (k not in ("origin", "destination") or v in PLACES)}
         merged = {**rules, **parsed}
+        # A curated alias the rider actually typed beats Claude's guess for that endpoint.
+        kept = []
+        for k in ("origin", "destination"):
+            text = rules.get(f"{k}_text")
+            if text and rules.get(k) and alias_place(text) == rules[k] and parsed.get(k) != rules[k]:
+                merged[k] = rules[k]
+                kept.append(f"{k}={rules[k]} (alias, not {parsed.get(k) or parsed.get(f'{k}_text')})")
         trace.log("Intent", "llm", (time.perf_counter() - t0) * 1000,
-                  f"{json.dumps(parsed)}", INTENT_MODEL,
+                  f"{json.dumps(parsed)}" + (f"; kept {', '.join(kept)}" if kept else ""), INTENT_MODEL,
                   resp.usage.input_tokens + resp.usage.output_tokens)
         return merged
     except Exception as e:

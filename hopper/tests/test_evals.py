@@ -65,3 +65,30 @@ def test_intent_check_is_case_insensitive_and_checks_absent_fields():
     case = {"expect": {"origin_text": "500 Folsom St", "max_cost": 5}, "absent": ["origin"]}
     assert checks.intent(case, {"origin_text": "500 folsom st", "max_cost": 5.0}) == []
     assert len(checks.intent(case, {"origin": "moscone", "max_cost": 6})) == 3
+
+
+class _FakeClaude:
+    """Stands in for Anthropic: answers the trip_request tool with a fixed guess."""
+    def __init__(self, guess):
+        from types import SimpleNamespace as NS
+        block = NS(type="tool_use", input=guess)
+        self.messages = NS(create=lambda **kw: NS(content=[block], usage=NS(input_tokens=1, output_tokens=1)))
+
+
+def test_curated_alias_beats_claudes_guess():
+    from app import agents
+    trace = agents.Trace()
+    claude = _FakeClaude({"origin": "golden_gate_park", "destination": "ferry_building", "mode": "hustle"})
+    parsed = agents.intent_agent("from ggp to fidi, I'm late", trace, claude)
+    assert parsed["destination"] == "montgomery" and parsed["mode"] == "hustle"
+    assert "kept destination=montgomery" in trace.steps[-1]["detail"]
+
+
+def test_claude_still_wins_without_an_alias():
+    from app import agents
+    # "the big ferry place" has no alias, so Claude's reading stands.
+    claude = _FakeClaude({"origin": "coit_tower", "destination": "ferry_building"})
+    parsed = agents.intent_agent("from coit tower to the big ferry place", agents.Trace(), claude)
+    assert parsed["destination"] == "ferry_building"
+    # Addresses never trigger an alias, even when a word looks like one ("Dolores St").
+    assert agents.alias_place("500 Dolores St") is None and agents.alias_place("fidi") == "montgomery"
