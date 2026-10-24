@@ -126,7 +126,10 @@ Pick one at the top (or let the Intent agent infer it from your question):
   outdoor seating, and your vibe (cocktail, craft beer, dive, wine, live music, sports,
   LGBTQ+, landmarks). Opening hours are shown, not validated — check before you go.
 
-Tests: `python3 -m pytest -q tests` (no network — live feeds are tested with sample payloads)
+Tests: `pip install -r requirements.txt && HOPPER_OFFLINE=1 python3 -m pytest -q tests`
+(no network — live feeds are tested with sample payloads). GitHub Actions runs the same
+suite on Python 3.12 for every push and pull request that touches `hopper/`
+(`.github/workflows/hopper-tests.yml`).
 
 ## Live data (free, no Google)
 
