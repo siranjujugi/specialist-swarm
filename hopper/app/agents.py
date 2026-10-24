@@ -436,14 +436,14 @@ def _street_leg(l, req):
     r = osrm.route(l.mode, tools.latlon(l.frm), tools.latlon(l.to))
     if l.mode == "walk":
         new = tools.walk_leg(l.frm, l.to, req["weight_kg"], dist=r["distance_mi"],
-                             path=r["path"], source="osrm.foot")
+                             path=r["path"], source=f"{r['engine']}.foot")
     elif l.mode in ("bike", "ebike"):
         new = tools.bike_leg(l.frm, l.to, l.mode == "ebike", req["hour"], req["weight_kg"],
-                             dist=r["distance_mi"], path=r["path"], source="osrm.bike")
+                             dist=r["distance_mi"], path=r["path"], source=f"{r['engine']}.bike")
     else:
         new = tools.ride_leg(l.frm, l.to, req["hour"], req["event"], dist=r["distance_mi"],
                              free_flow_min=r["duration_min"], path=r["path"],
-                             source="osrm.car+traffic")
+                             source=f"{r['engine']}.car+traffic")
     new.note = l.note
     return new, r["cache"]
 
@@ -457,7 +457,7 @@ def routing_agent(trips, req, trace):
     todo = {}
     for t in sorted(trips, key=lambda t: t.total_min):
         for l in t.legs:
-            if l.mode in osrm.PROFILE and not l.source.startswith("osrm"):
+            if l.mode in osrm.PROFILE and not l.source.startswith(("osrm", "ors")):
                 todo.setdefault((l.mode, l.frm, l.to), l)
     keys = list(todo)[:MAX_ROUTED_LEGS]
     routed, caches, failed = {}, {"live": 0, "memory": 0, "disk": 0}, 0
@@ -485,8 +485,9 @@ def routing_agent(trips, req, trace):
               + (f", {timed_out} past the {ROUTING_BUDGET_S:.0f}s budget" if timed_out else "")
               + (f", {skipped} over cap kept as estimates" if skipped else ""))
     if not routed:
-        return "estimated (OSRM unavailable)"
-    return "OSRM streets" if not (failed or skipped or timed_out) else "OSRM streets (partial)"
+        return "estimated (street routing unavailable)"
+    engines = " + ".join(sorted({"OpenRouteService" if l.source.startswith("ors") else "OSRM" for l in routed.values()}))
+    return f"Street routes ({engines})" + ("" if not (failed or skipped or timed_out) else ", partial")
 
 
 def osrm_off():

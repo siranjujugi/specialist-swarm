@@ -10,6 +10,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css"
+      integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK" crossorigin="anonymous">
 <style>
   /* Ride-app structure (full-bleed map, floating panel / bottom sheet, black CTA) with
      Hopper's own identity: Barlow signage type and International Orange for the Mode. */
@@ -494,6 +496,10 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"
+        integrity="sha384-5+cfbwT0iiub6VsQAdn6yz16nr6sDiQoHx6tm4O8OVYXHYOxcffFmCJBL0dgdvGp" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js"
+        integrity="sha384-tXYNKOHx4T02jMP7YYCtBxPIv1B5gaA5mcVPBzqMp6d7VzWzxJgI2aWF/nJLrQdS" crossorigin="anonymous"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const MODE_NAMES = { walk: "Walk", ride: "Ride", muni: "Muni", bart: "BART", cable: "Cable car", bike: "Bike", ebike: "E-bike",
@@ -542,18 +548,46 @@ const dark = () => matchMedia("(prefers-color-scheme: dark)").matches;
 const sel = { from: null, to: null, cstart: null, cend: null };
 const INPUT = { from: "from-input", to: "to-input", cstart: "cstart-input", cend: "cend-input" };
 
-// Map — muted gray canvas basemap (no API key) so routes carry the color.
+// Map — OpenFreeMap vector tiles (no key) rendered by MapLibre GL inside Leaflet: blue water,
+// green parks, highway shields, places, crisp labels at every zoom — the ride-app look.
+// No WebGL (old devices, some VMs) → the muted Esri raster canvas instead.
 const map = L.map("map", { zoomControl: false, attributionControl: true }).setView([37.773, -122.431], 13);
 L.control.zoom({ position: "topright" }).addTo(map);
-const esri = (layer) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${layer}/MapServer/tile/{z}/{y}/{x}`;
-const canvasLayers = () => dark() ? ["World_Dark_Gray_Base", "World_Dark_Gray_Reference"] : ["World_Light_Gray_Base", "World_Light_Gray_Reference"];
-const [baseName, refName] = canvasLayers();
-const tiles = L.tileLayer(esri(baseName), { maxZoom: 19, maxNativeZoom: 16,
-  attribution: 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors; routes OSRM; search Photon' }).addTo(map);
-const labels = L.tileLayer(esri(refName), { maxZoom: 19, maxNativeZoom: 16, pane: "overlayPane" }).addTo(map);
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-  const [b, r] = canvasLayers(); tiles.setUrl(esri(b)); labels.setUrl(esri(r));
-});
+const VECTOR_ATTR = '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>; routes OSRM / OpenRouteService; search Photon';
+const vectorStyle = () => `https://tiles.openfreemap.org/styles/${dark() ? "dark" : "liberty"}`;
+const hasWebGL = (() => { try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); } catch { return false; } })();
+let basemap;
+if (hasWebGL && L.maplibreGL) {
+  basemap = L.maplibreGL({ style: vectorStyle(), attribution: VECTOR_ATTR, interactive: false }).addTo(map);
+  const ml = basemap.getMaplibreMap();
+  // Ride-app palette on top of OpenFreeMap "liberty": cool-gray land, white streets,
+  // blue-gray highways, so our coloured routes are the loudest thing on the map.
+  const tune = () => {
+    if (dark()) return;
+    const set = (id, prop, val) => { try { ml.setPaintProperty(id, prop, val); } catch { /* layer absent */ } };
+    set("background", "background-color", "#f2f3f5");
+    set("landuse_residential", "fill-opacity", 0);
+    for (const l of ml.getStyle().layers) {
+      if (l.type === "fill" && /^water/.test(l.id)) set(l.id, "fill-color", "#aad3f2");
+      if (l.type !== "line" || !/^(road|bridge|tunnel)_/.test(l.id) || /rail|path|pedestrian/.test(l.id)) continue;
+      const highway = /motorway|trunk_primary/.test(l.id), casing = /casing/.test(l.id);
+      set(l.id, "line-color", highway ? (casing ? "#8ea2d8" : "#b4c3ee") : (casing ? "#dcdfe4" : "#ffffff"));
+    }
+  };
+  ml.on("style.load", tune);
+  if (ml.isStyleLoaded()) tune();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => ml.setStyle(vectorStyle()));
+} else {
+  const esri = (layer) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${layer}/MapServer/tile/{z}/{y}/{x}`;
+  const canvasLayers = () => dark() ? ["World_Dark_Gray_Base", "World_Dark_Gray_Reference"] : ["World_Light_Gray_Base", "World_Light_Gray_Reference"];
+  const [b, r] = canvasLayers();
+  basemap = L.tileLayer(esri(b), { maxZoom: 19, maxNativeZoom: 16,
+    attribution: 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors; routes OSRM / OpenRouteService; search Photon' }).addTo(map);
+  const labels = L.tileLayer(esri(r), { maxZoom: 19, maxNativeZoom: 16, pane: "overlayPane" }).addTo(map);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    const [b2, r2] = canvasLayers(); basemap.setUrl(esri(b2)); labels.setUrl(esri(r2));
+  });
+}
 
 // Where search and geocoding are biased: set instantly when a city is picked, then follows the map.
 let searchCenter = [37.7749, -122.4194];
@@ -1052,7 +1086,7 @@ function renderPlan(fresh) {
   const w = lv.weather;
   const conds = [
     [w ? `${w.temp_f}°F, ${w.summary.toLowerCase()}` : lv.condition === "rain" ? "Rain" : lv.condition === "fog" ? "Fog" : "Clear", !!w],
-    [lv.routes.startsWith("OSRM") ? "Street routes" : "Estimated routes", lv.routes.startsWith("OSRM")],
+    [lv.routes.startsWith("Street") ? "Street routes" : "Estimated routes", lv.routes.startsWith("Street")],
     plan.request.region === "world"
       ? [lv.world_transit === "ok" ? "Transitous transit" : "Transit unavailable", lv.world_transit === "ok"]
       : [lv.transit === "511 live" ? "Live arrivals" : "Scheduled arrivals", lv.transit === "511 live"],

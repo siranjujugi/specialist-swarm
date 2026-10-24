@@ -70,8 +70,17 @@ uses free global sources (no API keys):
   map so address search favours that city.
 - Outside SF the plain-English parser never fuzzy-matches SF landmarks; it geocodes the
   rider's words near where the map is.
-- The FOSSGIS OSRM servers rate-limit bursts; when they refuse, legs fall back to estimates
-  ("Estimated routes"). For real traffic, run your own `osrm-backend` and set `OSRM_BASE_URL`.
+- The FOSSGIS OSRM servers rate-limit bursts. When they refuse, Hopper pauses OSRM for 5
+  minutes and uses **OpenRouteService** if `ORS_API_KEY` is set (free: 2,000 routes/day; key
+  sent only in the Authorization header). With neither, legs fall back to straight-line
+  estimates ("Estimated routes"). For heavy use, run your own `osrm-backend` (`OSRM_BASE_URL`).
+
+## Map
+
+Vector basemap from **OpenFreeMap** (no key) rendered by **MapLibre GL 5.24** inside Leaflet,
+restyled at load for a ride-app look: cool-gray land, white streets, blue-gray highways, blue
+water, transit-stop and place icons, labels that follow the streets. Dark mode uses
+OpenFreeMap's dark style. Devices without WebGL fall back to Esri's gray raster canvas.
 
 ## Place search
 

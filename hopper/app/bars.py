@@ -196,7 +196,7 @@ def choose_stops(bars, start, n, vibe, hop_mi, radius_mi=0.6):
 def _walk(a_pt, b_pt, a_name, b_name, kg):
     try:
         r = osrm.route("walk", a_pt, b_pt)
-        dist, path, src = r["distance_mi"], r["path"], "osrm.foot"
+        dist, path, src = r["distance_mi"], r["path"], f"{r['engine']}.foot"
     except FeedError:
         dist, path, src = tools.haversine_pts(a_pt, b_pt) * tools.WALK_CIRCUITY, [a_pt, b_pt], "estimate"
     minutes = dist * tools.MI_TO_M / 1000 / tools.tobler_speed_kmh(0) * 60
@@ -210,7 +210,7 @@ def _walk(a_pt, b_pt, a_name, b_name, kg):
 def _ride(a_pt, b_pt, a_name, b_name, hour, event):
     try:
         r = osrm.route("ride", a_pt, b_pt)
-        dist, path, src = r["distance_mi"], r["path"], "osrm.car+traffic"
+        dist, path, src = r["distance_mi"], r["path"], f"{r['engine']}.car+traffic"
         minutes = r["duration_min"] * tools.traffic_factor(hour)
     except FeedError:
         dist = tools.haversine_pts(a_pt, b_pt) * tools.DRIVE_CIRCUITY

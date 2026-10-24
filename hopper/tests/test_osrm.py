@@ -43,7 +43,7 @@ def test_routing_agent_swaps_legs(monkeypatch):
     req = {**agents.DEFAULTS, "hour": 12, "event": False}
     trip = tools.Trip([tools.walk_leg("ferry_building", "coit_tower")], "test")
     trace = agents.Trace()
-    assert agents.routing_agent([trip], req, trace) == "OSRM streets"
+    assert agents.routing_agent([trip], req, trace) == "Street routes (OSRM)"
     assert trip.legs[0].source == "osrm.foot" and len(trip.legs[0].path) == 3
 
 
@@ -57,3 +57,45 @@ def test_routing_agent_keeps_estimates_when_osrm_fails(monkeypatch):
     trip = tools.Trip([tools.walk_leg("ferry_building", "coit_tower")], "test")
     assert agents.routing_agent([trip], req, agents.Trace()).startswith("estimated")
     assert trip.legs[0].source == "walk_leg"
+
+
+ORS_SAMPLE = {"type": "FeatureCollection", "features": [{
+    "properties": {"summary": {"distance": 2184.0, "duration": 1747.0}},
+    "geometry": {"type": "LineString", "coordinates": [[-122.3937, 37.7955, 3.0], [-122.4058, 37.8024, 80.0]]}}]}
+
+
+def test_parse_ors_matches_osrm_shape():
+    r = osrm.parse_ors(ORS_SAMPLE)
+    assert r["engine"] == "ors" and r["path"] == [[37.7955, -122.3937], [37.8024, -122.4058]]
+    assert r["distance_mi"] == pytest.approx(1.357, abs=0.001)
+
+
+def test_ors_used_when_osrm_refuses_and_key_set(monkeypatch):
+    monkeypatch.setattr(osrm, "_osrm_down_until", 0.0)
+    monkeypatch.setenv("ORS_API_KEY", "ors-test-key-not-real")
+
+    def refused(mode, a, b):
+        raise FeedError("URLError: <urlopen error [Errno 61] Connection refused>")
+    seen = {}
+
+    def fake_post(url, body, headers=None, **kw):
+        seen.update(url=url, headers=headers, cache_key=kw.get("cache_key"))
+        return ORS_SAMPLE, {"cache": "live"}
+    monkeypatch.setattr(osrm, "_osrm", refused)
+    monkeypatch.setattr(osrm, "post_json", fake_post)
+    r = osrm.route("walk", [37.7955, -122.3937], [37.8024, -122.4058])
+    assert r["engine"] == "ors" and "foot-walking" in seen["url"]
+    assert seen["headers"]["Authorization"] == "ors-test-key-not-real"
+    assert "ors-test-key-not-real" not in seen["url"] and "ors-test-key-not-real" not in seen["cache_key"]
+    assert osrm._osrm_down_until > 0                            # OSRM skipped for a while after a refusal
+
+
+def test_without_ors_key_osrm_errors_propagate(monkeypatch):
+    monkeypatch.setattr(osrm, "_osrm_down_until", 0.0)
+    monkeypatch.delenv("ORS_API_KEY", raising=False)
+
+    def refused(mode, a, b):
+        raise FeedError("Connection refused")
+    monkeypatch.setattr(osrm, "_osrm", refused)
+    with pytest.raises(FeedError):
+        osrm.route("ride", [37.79, -122.39], [37.80, -122.40])
