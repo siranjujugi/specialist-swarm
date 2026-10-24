@@ -1,0 +1,218 @@
+{
+ "caltrain-to-warriors-rain/broke": {
+  "legs": "muni:Muni T Third (Central Subway)",
+  "total_min": 10.0,
+  "cost": 2.85,
+  "kcal": 0
+ },
+ "caltrain-to-warriors-rain/burn": {
+  "legs": "muni:Muni T Third (Central Subway)",
+  "total_min": 10.0,
+  "cost": 2.85,
+  "kcal": 0
+ },
+ "caltrain-to-warriors-rain/hustle": {
+  "legs": "muni:Muni T Third (Central Subway)",
+  "total_min": 10.0,
+  "cost": 2.85,
+  "kcal": 0
+ },
+ "castro-to-giants-game/broke": {
+  "legs": "bike",
+  "total_min": 21.8,
+  "cost": 4.49,
+  "kcal": 151
+ },
+ "castro-to-giants-game/burn": {
+  "legs": "walk+muni:Muni N Judah+walk",
+  "total_min": 63.8,
+  "cost": 2.85,
+  "kcal": 181
+ },
+ "castro-to-giants-game/hustle": {
+  "legs": "ebike",
+  "total_min": 17.0,
+  "cost": 9.3,
+  "kcal": 60
+ },
+ "ferry-to-painted-ladies-am/broke": {
+  "legs": "walk+muni:Muni N Judah+walk",
+  "total_min": 38.3,
+  "cost": 2.85,
+  "kcal": 110
+ },
+ "ferry-to-painted-ladies-am/burn": {
+  "legs": "walk+muni:Muni N Judah+walk",
+  "total_min": 55.3,
+  "cost": 2.85,
+  "kcal": 188
+ },
+ "ferry-to-painted-ladies-am/hustle": {
+  "legs": "ebike",
+  "total_min": 15.5,
+  "cost": 8.85,
+  "kcal": 54
+ },
+ "ferry-to-painted-ladies-rain/broke": {
+  "legs": "walk+bart:BART (SFO line)+ride",
+  "total_min": 29.5,
+  "cost": 14.35,
+  "kcal": 19
+ },
+ "ferry-to-painted-ladies-rain/burn": {
+  "legs": "walk+bart:BART (SFO line)+ride",
+  "total_min": 29.5,
+  "cost": 14.35,
+  "kcal": 19
+ },
+ "ferry-to-painted-ladies-rain/hustle": {
+  "legs": "ride",
+  "total_min": 28.5,
+  "cost": 17.72,
+  "kcal": 0
+ },
+ "ggp-to-fidi-commute/broke": {
+  "legs": "ebike+walk",
+  "total_min": 30.1,
+  "cost": 11.59,
+  "kcal": 106
+ },
+ "ggp-to-fidi-commute/burn": {
+  "legs": "walk+muni:Muni N Judah+walk",
+  "total_min": 71.8,
+  "cost": 2.85,
+  "kcal": 179
+ },
+ "ggp-to-fidi-commute/hustle": {
+  "legs": "ride",
+  "total_min": 14.1,
+  "cost": 15.5,
+  "kcal": 0
+ },
+ "mission-to-coit-fog/broke": {
+  "legs": "bart:BART (SFO line)+walk",
+  "total_min": 37.8,
+  "cost": 2.4,
+  "kcal": 123
+ },
+ "mission-to-coit-fog/burn": {
+  "legs": "bart:BART (SFO line)+walk",
+  "total_min": 42.9,
+  "cost": 2.4,
+  "kcal": 140
+ },
+ "mission-to-coit-fog/hustle": {
+  "legs": "bart:BART (SFO line)+ride",
+  "total_min": 22.6,
+  "cost": 14.35,
+  "kcal": 0
+ },
+ "nob-hill-to-dolores-under-5/broke": {
+  "legs": "walk+bart:BART (SFO line)+walk",
+  "total_min": 40.5,
+  "cost": 2.4,
+  "kcal": 127
+ },
+ "nob-hill-to-dolores-under-5/burn": {
+  "legs": "walk+muni:Muni N Judah+walk",
+  "total_min": 53.3,
+  "cost": 2.85,
+  "kcal": 176
+ },
+ "nob-hill-to-dolores-under-5/hustle": {
+  "legs": "walk+bart:BART (SFO line)+walk",
+  "total_min": 37.2,
+  "cost": 2.4,
+  "kcal": 105
+ },
+ "ocean-beach-to-salesforce/broke": {
+  "legs": "muni:Muni N Judah+walk",
+  "total_min": 47.4,
+  "cost": 2.85,
+  "kcal": 19
+ },
+ "ocean-beach-to-salesforce/burn": {
+  "legs": "muni:Muni N Judah+walk",
+  "total_min": 67.3,
+  "cost": 2.85,
+  "kcal": 100
+ },
+ "ocean-beach-to-salesforce/hustle": {
+  "legs": "ride",
+  "total_min": 20.8,
+  "cost": 22.13,
+  "kcal": 0
+ },
+ "pier-39-to-lombard-short/broke": {
+  "legs": "walk",
+  "total_min": 19.8,
+  "cost": 0.0,
+  "kcal": 106
+ },
+ "pier-39-to-lombard-short/burn": {
+  "legs": "walk",
+  "total_min": 19.8,
+  "cost": 0.0,
+  "kcal": 106
+ },
+ "pier-39-to-lombard-short/hustle": {
+  "legs": "ride",
+  "total_min": 8.7,
+  "cost": 11.95,
+  "kcal": 0
+ },
+ "presidio-to-civic-late/broke": {
+  "legs": "walk+ride+walk",
+  "total_min": 39.5,
+  "cost": 14.5,
+  "kcal": 65
+ },
+ "presidio-to-civic-late/burn": {
+  "legs": "walk+ride+walk",
+  "total_min": 39.5,
+  "cost": 14.5,
+  "kcal": 65
+ },
+ "presidio-to-civic-late/hustle": {
+  "legs": "ride",
+  "total_min": 22.1,
+  "cost": 15.71,
+  "kcal": 0
+ },
+ "union-square-to-sfo/broke": {
+  "legs": "walk+bart:BART (SFO line)",
+  "total_min": 43.7,
+  "cost": 10.95,
+  "kcal": 19
+ },
+ "union-square-to-sfo/burn": {
+  "legs": "walk+ride",
+  "total_min": 49.1,
+  "cost": 36.33,
+  "kcal": 86
+ },
+ "union-square-to-sfo/hustle": {
+  "legs": "ride",
+  "total_min": 37.2,
+  "cost": 48.55,
+  "kcal": 0
+ },
+ "wharf-to-twin-peaks-flat/broke": {
+  "legs": "ride",
+  "total_min": 14.5,
+  "cost": 15.93,
+  "kcal": 0
+ },
+ "wharf-to-twin-peaks-flat/burn": {
+  "legs": "walk+bart:BART (SFO line)+ride",
+  "total_min": 67.1,
+  "cost": 14.35,
+  "kcal": 120
+ },
+ "wharf-to-twin-peaks-flat/hustle": {
+  "legs": "ride",
+  "total_min": 14.5,
+  "cost": 15.93,
+  "kcal": 0
+ }
+}
