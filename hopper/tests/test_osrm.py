@@ -86,6 +86,7 @@ def test_ors_used_when_osrm_refuses_and_key_set(monkeypatch):
     r = osrm.route("walk", [37.7955, -122.3937], [37.8024, -122.4058])
     assert r["engine"] == "ors" and "foot-walking" in seen["url"]
     assert seen["headers"]["Authorization"] == "ors-test-key-not-real"
+    assert "application/geo+json" in seen["headers"]["Accept"]          # ORS 406s a JSON-only Accept
     assert "ors-test-key-not-real" not in seen["url"] and "ors-test-key-not-real" not in seen["cache_key"]
     assert osrm._osrm_down_until > 0                            # OSRM skipped for a while after a refusal
 

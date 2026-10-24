@@ -73,7 +73,9 @@ def _ors(mode, a, b):
         raise FeedError("OpenRouteService hourly budget spent")
     body = {"coordinates": [[round(alon, 5), round(alat, 5)], [round(blon, 5), round(blat, 5)]]}
     data, meta = post_json(ORS_API.format(profile=ORS_PROFILE[mode]), body,
-                           headers={"Authorization": ors_key()}, ttl=86400,
+                           # The /geojson endpoint answers application/geo+json and 406s a plain JSON Accept.
+                           headers={"Authorization": ors_key(), "Accept": "application/geo+json, application/json"},
+                           ttl=86400,
                            cache_key=f"ors:{mode}:{body['coordinates']}", timeout=10)
     return {**parse_ors(data), "cache": meta["cache"]}
 
