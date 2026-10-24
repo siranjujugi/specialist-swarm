@@ -2,384 +2,522 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
 <title>Hopper</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Semi+Condensed:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
-  /* Tokens — SF palette: fog, bay ink, and the bridge's International Orange.
-     Mode colors are data, never decoration. */
+  /* Ride-app structure (full-bleed map, floating panel / bottom sheet, black CTA) with
+     Hopper's own identity: Barlow signage type and International Orange for the Mode. */
   :root {
-    --fog: #e9eef0; --paper: #f8fafb; --ink: #18324a; --ink-2: #4f6577; --ink-3: #7a8d9b;
-    --rule: #cfd8de; --rule-2: #e2e8ec;
-    --orange: #e5482a; --orange-ink: #ffffff; --orange-wash: #fbe5de;
-    --focus: #1d5c8c; --warn: #9a3412; --ok: #15803d;
-    --m-walk: #16a34a; --m-ride: #18324a; --m-muni: #dc2626; --m-bart: #2563eb;
-    --m-cable: #a16207; --m-bike: #7c3aed; --m-ebike: #c026d3;
+    --bg: #ffffff; --surface: #f2f3f4; --surface-2: #e7e9eb; --ink: #000000; --ink-2: #545b62;
+    --ink-3: #8a9198; --rule: #e4e6e8; --cta: #000000; --cta-ink: #ffffff;
+    --orange: #e5482a; --orange-ink: #ffffff; --orange-wash: #fdebe6;
+    --focus: #276ef1; --warn: #b42318; --ok: #12a150;
+    --shadow: 0 8px 28px rgb(0 0 0 / .14), 0 1px 3px rgb(0 0 0 / .08);
+    --m-walk: #12a150; --m-ride: #000000; --m-muni: #d92d20; --m-bart: #276ef1;
+    --m-cable: #a15c07; --m-bike: #7a3ff2; --m-ebike: #c11574;
     --display: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
     --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --sheet: 58vh;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --fog: #0e1923; --paper: #13212e; --ink: #e5edf2; --ink-2: #9db0be; --ink-3: #72879a;
-      --rule: #2a3c4c; --rule-2: #1d2d3b;
-      --orange: #ff6b47; --orange-ink: #1b0b06; --orange-wash: #3a1c14;
-      --focus: #7cb7e6; --warn: #fdba74; --ok: #4ade80; --m-ride: #c8d4dc;
+      --bg: #16191c; --surface: #23272b; --surface-2: #2e3338; --ink: #f4f5f6; --ink-2: #b3bac1;
+      --ink-3: #828a92; --rule: #2c3136; --cta: #ffffff; --cta-ink: #000000;
+      --orange: #ff6b47; --orange-ink: #1b0b06; --orange-wash: #3a1d16;
+      --focus: #7aa7ff; --warn: #fda29b; --ok: #47cd89; --m-ride: #f4f5f6;
+      --shadow: 0 8px 28px rgb(0 0 0 / .5), 0 1px 3px rgb(0 0 0 / .4);
     }
   }
   :root[data-theme="dark"] {
-    --fog: #0e1923; --paper: #13212e; --ink: #e5edf2; --ink-2: #9db0be; --ink-3: #72879a;
-    --rule: #2a3c4c; --rule-2: #1d2d3b;
-    --orange: #ff6b47; --orange-ink: #1b0b06; --orange-wash: #3a1c14;
-    --focus: #7cb7e6; --warn: #fdba74; --ok: #4ade80; --m-ride: #c8d4dc;
+    --bg: #16191c; --surface: #23272b; --surface-2: #2e3338; --ink: #f4f5f6; --ink-2: #b3bac1;
+    --ink-3: #828a92; --rule: #2c3136; --cta: #ffffff; --cta-ink: #000000;
+    --orange: #ff6b47; --orange-ink: #1b0b06; --orange-wash: #3a1d16;
+    --focus: #7aa7ff; --warn: #fda29b; --ok: #47cd89; --m-ride: #f4f5f6;
+    --shadow: 0 8px 28px rgb(0 0 0 / .5), 0 1px 3px rgb(0 0 0 / .4);
   }
 
   * { box-sizing: border-box; }
-  body { margin: 0; font: 400 16px/1.5 var(--body); background: var(--fog); color: var(--ink);
-         -webkit-font-smoothing: antialiased; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 400 16px/1.45 var(--body); color: var(--ink); background: var(--bg);
+         -webkit-font-smoothing: antialiased; overflow: hidden; }
   button, input, select { font: inherit; color: inherit; }
-  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
-  .num-tab { font-variant-numeric: tabular-nums; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  svg.i { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8;
+          stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
-  .app { display: grid; grid-template-columns: 468px 1fr; height: 100vh; }
-  aside { overflow-y: auto; background: var(--paper); border-right: 1px solid var(--rule);
-          padding: 22px 24px 48px; }
-  #map { height: 100%; background: var(--fog); }
+  #map { position: fixed; inset: 0; z-index: 0; background: var(--surface); }
 
-  /* Header — the wordmark sits beside a tiny line diagram: walk, then ride. */
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand svg { flex: none; }
-  h1 { font: 800 36px/1 var(--display); letter-spacing: -0.01em; margin: 0; }
-  .tag { margin: 6px 0 20px; color: var(--ink-2); font-size: 15px; max-width: 34ch; }
+  /* Panel: floating card on desktop, bottom sheet on phones. */
+  .panel { position: fixed; z-index: 10; display: flex; flex-direction: column; background: var(--bg);
+           box-shadow: var(--shadow); left: 16px; top: 16px; bottom: 16px; width: 420px; border-radius: 16px;
+           overflow: hidden; }
+  .handle { display: none; }
+  .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px 24px; }
+  .cta-bar { padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--rule); background: var(--bg); }
+  .cta { width: 100%; height: 54px; border: 0; border-radius: 10px; background: var(--cta); color: var(--cta-ink);
+         font: 600 18px/1 var(--body); }
+  .cta:disabled { opacity: .5; cursor: not-allowed; }
 
-  /* Mode selector — one connected route-sign strip, not four tiles. */
-  .modes { display: grid; grid-template-columns: repeat(4, 1fr); border: 1.5px solid var(--ink);
-           border-radius: 10px; overflow: hidden; }
-  .mode { appearance: none; border: 0; border-left: 1.5px solid var(--ink); background: transparent;
-          padding: 10px 6px 9px; cursor: pointer; display: grid; justify-items: center; gap: 2px;
-          text-align: center; transition: background-color .15s, color .15s; }
-  .mode:first-child { border-left: 0; }
-  .mode svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8;
-              stroke-linecap: round; stroke-linejoin: round; }
-  .mode b { font: 700 16px/1.1 var(--display); }
-  .mode small { font-size: 12px; line-height: 1.2; color: var(--ink-2); }
-  .mode:hover { background: var(--rule-2); }
+  /* Brand */
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .brand h1 { font: 800 28px/1 var(--display); margin: 0; letter-spacing: -0.01em; }
+  .brand .who { margin-left: auto; font-size: 13px; color: var(--ink-3); }
+
+  /* Route inputs — origin dot, destination square, joined by a line (ride-app convention). */
+  .route { position: relative; background: var(--surface); border-radius: 12px; padding: 6px 48px 6px 40px; }
+  .route::before { content: ""; position: absolute; left: 19px; top: 30px; bottom: 30px; width: 2px; background: var(--ink); }
+  .route .o, .route .d { position: absolute; left: 14px; width: 12px; height: 12px; background: var(--ink); }
+  .route .o { top: 24px; border-radius: 50%; }
+  .route .d { bottom: 24px; }
+  .route select { width: 100%; height: 48px; border: 0; background: transparent; font-size: 17px; font-weight: 500;
+                  appearance: none; padding: 0; }
+  .route .sep { height: 1px; background: var(--rule); }
+  .swap { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px;
+          border-radius: 50%; border: 0; background: var(--bg); display: grid; place-items: center; box-shadow: 0 1px 3px rgb(0 0 0 / .15); }
+  .ask { position: relative; margin-top: 10px; }
+  .ask svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--ink-3); }
+  .ask input { width: 100%; height: 48px; border: 1px solid var(--rule); border-radius: 12px; padding: 0 14px 0 42px;
+               background: var(--bg); font-size: 16px; }
+  .ask input::placeholder { color: var(--ink-3); }
+
+  /* Mode chips */
+  .modes { display: flex; gap: 8px; margin: 16px 0 4px; overflow-x: auto; scrollbar-width: none; }
+  .modes::-webkit-scrollbar { display: none; }
+  .mode { flex: none; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 12px;
+          border-radius: 22px; border: 0; background: var(--surface); font-weight: 600; font-size: 15px; white-space: nowrap; }
+  .mode small { font-weight: 400; color: var(--ink-2); font-size: 13px; }
+  .mode:hover { background: var(--surface-2); }
   .mode.active { background: var(--orange); color: var(--orange-ink); }
   .mode.active small { color: inherit; opacity: .85; }
 
-  /* Forms */
-  .field-label { display: block; font-size: 13px; font-weight: 500; color: var(--ink-2); margin: 0 0 4px; }
-  input[type=text], input[type=number], select {
-    width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 8px;
-    background: var(--fog); }
-  select { appearance: none; padding-right: 30px;
-    background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%), linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
-    background-position: right 15px center, right 10px center; background-size: 5px 5px; background-repeat: no-repeat; }
-  input::placeholder { color: var(--ink-3); }
-  .ask { margin-top: 20px; }
-  .ask input { height: 48px; font-size: 16px; background: var(--paper); border: 1.5px solid var(--ink); }
-  .or { color: var(--ink-3); font-size: 13px; margin: 14px 0 8px; }
-  /* From → To drawn as a two-stop line, the way a transit map would. */
-  .stops-pick { display: grid; grid-template-columns: 18px 1fr; column-gap: 10px; row-gap: 8px; align-items: center; }
-  .stops-pick .rail { grid-row: 1 / span 2; align-self: stretch; position: relative; }
-  .stops-pick .rail::before { content: ""; position: absolute; left: 8px; top: 21px; bottom: 21px;
-                              border-left: 2px dotted var(--ink-3); }
-  .stops-pick .rail i { position: absolute; left: 3px; width: 12px; height: 12px; border-radius: 50%; }
-  .stops-pick .rail i:first-child { top: 15px; background: var(--ink); }
-  .stops-pick .rail i:last-child { bottom: 15px; border: 3px solid var(--orange); background: var(--paper); }
-  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .toggles { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
-  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
-  .toggle input { appearance: none; width: 32px; height: 18px; border-radius: 9px; margin: 0;
-                  background: var(--rule); position: relative; cursor: pointer; transition: background .15s; }
-  .toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
-                         border-radius: 50%; background: var(--paper); transition: transform .15s; }
-  .toggle input:checked { background: var(--ink); }
-  .toggle input:checked::after { transform: translateX(14px); }
-  .go { width: 100%; height: 48px; margin-top: 16px; border: 0; border-radius: 8px; cursor: pointer;
-        background: var(--orange); color: var(--orange-ink); font: 700 18px/1 var(--display); letter-spacing: .01em; }
-  .go:hover { filter: brightness(1.05); }
-  .go:disabled { opacity: .65; cursor: progress; }
-  .vibes { display: flex; gap: 6px; flex-wrap: wrap; }
-  .vibes button { border: 1px solid var(--rule); background: var(--fog); border-radius: 999px;
-                  padding: 5px 12px; font-size: 14px; cursor: pointer; }
-  .vibes button.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-  .fine { font-size: 13px; color: var(--ink-3); margin-top: 10px; }
-  .error { margin-top: 12px; color: var(--warn); font-weight: 500; }
-  .notice { margin-top: 14px; padding: 10px 12px; border-left: 3px solid var(--orange);
-            background: var(--orange-wash); font-size: 14px; border-radius: 0 6px 6px 0; }
+  /* Condition pills (leave time, weather, budget, toggles) */
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .pill { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px;
+          border-radius: 18px; background: var(--surface); font-size: 14px; font-weight: 500; border: 0; }
+  .pill select { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .pill input[type=number] { width: 56px; border: 0; background: transparent; font-weight: 500; padding: 0; }
+  .pill.toggle input { position: absolute; opacity: 0; inset: 0; cursor: pointer; margin: 0; }
+  .pill.toggle:has(input:checked) { background: var(--ink); color: var(--bg); }
+  .pill:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-  details { margin-top: 18px; border-top: 1px solid var(--rule-2); padding-top: 10px; }
-  summary { cursor: pointer; font-weight: 500; color: var(--ink-2); font-size: 14px; list-style: none;
-            display: flex; align-items: center; gap: 8px; }
-  summary::-webkit-details-marker { display: none; }
-  summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor;
-                    border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
-  details[open] > summary::before { transform: rotate(45deg); }
-  .sliders { display: grid; gap: 6px; margin: 10px 0 12px; }
-  .slider { display: grid; grid-template-columns: 64px 1fr 28px; align-items: center; gap: 10px; font-size: 14px; }
-  .slider input { width: 100%; accent-color: var(--orange); }
+  .section-title { font: 700 20px/1.2 var(--display); margin: 22px 0 6px; }
+  .places { list-style: none; margin: 0; padding: 0; }
+  .places button { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 0; border: 0;
+                   background: none; text-align: left; border-bottom: 1px solid var(--rule); }
+  .places .ic { width: 36px; height: 36px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; }
+  .places b { display: block; font-weight: 600; }
+  .places span.s { font-size: 14px; color: var(--ink-2); }
+
+  /* Crawl form bits */
+  .vibes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .vibes button { height: 36px; padding: 0 14px; border-radius: 18px; border: 0; background: var(--surface); font-weight: 500; }
+  .vibes button.on { background: var(--ink); color: var(--bg); }
+  .fine { font-size: 13px; color: var(--ink-3); margin: 12px 0 0; }
+  .error { color: var(--warn); font-weight: 500; margin-top: 12px; }
+  .notice { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--orange-wash); font-size: 14px; }
+
+  details.more { margin-top: 18px; }
+  details.more summary { cursor: pointer; font-weight: 600; font-size: 15px; list-style: none; display: flex;
+                         align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--rule); }
+  details.more summary::-webkit-details-marker { display: none; }
+  details.more summary::after { content: "+"; font-size: 20px; color: var(--ink-2); }
+  details.more[open] summary::after { content: "−"; }
+  .sliders { display: grid; gap: 8px; margin-bottom: 12px; }
+  .slider { display: grid; grid-template-columns: 64px 1fr 30px; gap: 10px; align-items: center; font-size: 14px; }
+  .slider input { accent-color: var(--orange); }
   .slider b { text-align: right; font-variant-numeric: tabular-nums; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .field label { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 4px; }
+  .field input, .field select { width: 100%; height: 40px; border-radius: 8px; border: 0; background: var(--surface); padding: 0 10px; }
 
-  /* Results */
-  .results-head { margin-top: 26px; padding-top: 18px; border-top: 2px solid var(--ink); }
-  .results-head h2 { font: 700 24px/1.15 var(--display); margin: 0; }
-  .results-head p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
-  .conditions { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
-  .conditions .wx { color: var(--ink); font-weight: 500; }
-  .src { display: inline-flex; align-items: center; gap: 6px; }
-  .src::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
-  .src.on::before { background: var(--ok); }
+  /* Results header */
+  .rhead { display: flex; align-items: flex-start; gap: 10px; }
+  .back { width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%; background: var(--surface);
+          display: grid; place-items: center; }
+  .rhead h2 { font: 700 22px/1.15 var(--display); margin: 2px 0 0; }
+  .rhead p { margin: 2px 0 0; font-size: 14px; color: var(--ink-2); }
+  .conditions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .cond { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px;
+          background: var(--surface); font-size: 13px; color: var(--ink-2); }
+  .cond .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+  .cond.on .dot { background: var(--ok); }
 
-  .opt { position: relative; padding: 16px 0 16px 16px; border-bottom: 1px solid var(--rule-2); cursor: pointer; }
-  .opt::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 3px;
-                 border-radius: 2px; background: transparent; }
-  .opt.active::before { background: var(--orange); }
-  .opt:hover:not(.active)::before { background: var(--rule); }
-  .opt .label { font-weight: 600; font-size: 14px; color: var(--ink-2); }
-  .opt.active .label { color: var(--orange); }
-  .headline { display: flex; align-items: baseline; gap: 18px; margin-top: 2px; }
-  .headline .big { font: 800 34px/1 var(--display); font-variant-numeric: tabular-nums; }
-  .headline .big small { font: 700 18px var(--display); margin-left: 2px; }
-  .headline .side { margin-left: auto; text-align: right; font-size: 13px; color: var(--ink-2); line-height: 1.35; }
-  .headline .side b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  /* Trip rows — ride-list pattern: icons, title + arrival, price on the right. */
+  .opts { margin-top: 10px; }
+  .opt { border: 2px solid transparent; border-radius: 12px; margin: 0 -10px; }
+  .opt.active { border-color: var(--ink); }
+  .opt-head { width: 100%; display: grid; grid-template-columns: 74px 1fr auto; gap: 12px; align-items: center;
+              padding: 12px 10px; background: none; border: 0; text-align: left; }
+  .glyphs { display: flex; align-items: center; gap: 2px; }
+  .glyph { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--c); }
+  .glyph svg { width: 17px; height: 17px; stroke-width: 2; }
+  .glyph.more { background: var(--surface-2); color: var(--ink-2); font-size: 12px; font-weight: 700; }
+  .opt-title { font-weight: 700; font-size: 17px; line-height: 1.2; }
+  .opt-sub { font-size: 14px; color: var(--ink-2); }
+  .opt-sub b { color: var(--ink); font-weight: 600; }
+  .opt-price { text-align: right; font: 700 20px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .opt-price small { display: block; margin-top: 4px; font: 400 13px var(--body); color: var(--ink-2); }
+  .tagline { display: inline-block; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--orange); }
+  .detail { padding: 0 10px 14px; }
 
-  /* The line diagram: each leg a segment sized to its minutes, stop dots at handoffs. */
-  .line { display: flex; margin: 18px 4px 6px 6px; }
+  /* Line diagram inside the selected trip */
+  .line { display: flex; margin: 16px 4px 4px 6px; }
   .seg { position: relative; min-width: 34px; padding-top: 18px; }
   .seg .bar { height: 6px; background: var(--c); border-radius: 3px; transform-origin: left center; }
   .seg.walk .bar { background: radial-gradient(circle, var(--c) 2.2px, transparent 2.6px) 0 50% / 9px 6px repeat-x; }
-  .seg .tag2 { position: absolute; top: 0; left: 10px; right: 4px; font-size: 12px; font-weight: 600;
-               color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .seg::before, .line .end { content: ""; position: absolute; z-index: 1; top: 14px; left: -6px;
-               width: 14px; height: 14px; border-radius: 50%; background: var(--paper); border: 3px solid var(--ink); }
+  .seg .lbl { position: absolute; top: 0; left: 10px; right: 4px; font-size: 12px; font-weight: 600; color: var(--c);
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg::before, .line .end { content: ""; position: absolute; z-index: 1; top: 14px; left: -6px; width: 14px; height: 14px;
+                             border-radius: 50%; background: var(--bg); border: 3px solid var(--ink); }
   .seg:first-child::before { background: var(--ink); }
   .line .end-wrap { position: relative; width: 0; }
-  .line .end { left: -8px; border-color: var(--orange); }
-  /* "backwards" (not "both"): once drawn, the bar falls back to its plain static style. */
-  .draw .seg .bar { animation: draw .5s cubic-bezier(.3,.7,.2,1) backwards; }
-  .draw .seg:nth-child(2) .bar { animation-delay: .12s; }
-  .draw .seg:nth-child(3) .bar { animation-delay: .24s; }
-  .draw .seg:nth-child(4) .bar { animation-delay: .36s; }
-  @keyframes draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-  @media (prefers-reduced-motion: reduce) { .draw .seg .bar { animation: none; } }
+  .line .end { left: -8px; border-radius: 3px; background: var(--ink); }
+  .draw .seg .bar { animation: draw .45s cubic-bezier(.3,.7,.2,1) backwards; }
+  .draw .seg:nth-child(2) .bar { animation-delay: .1s; }
+  .draw .seg:nth-child(3) .bar { animation-delay: .2s; }
+  .draw .seg:nth-child(4) .bar { animation-delay: .3s; }
+  @keyframes draw { from { transform: scaleX(0); } }
 
-  .legs { list-style: none; margin: 10px 0 0; padding: 0; font-size: 14px; }
-  .legs li { display: grid; grid-template-columns: 72px 1fr; gap: 8px; padding: 3px 0; }
-  .legs .m { font-weight: 600; color: var(--c); }
-  .legs .d { color: var(--ink); }
-  .legs .x { color: var(--ink-2); font-size: 13px; }
-  .why { margin-top: 10px; font-size: 15px; color: var(--ink-2); max-width: 60ch; }
-  .flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .flags span { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--fog); color: var(--ink-2); }
-  .book { margin-top: 12px; height: 36px; padding: 0 14px; border-radius: 8px; cursor: pointer;
-          border: 1.5px solid var(--ink); background: transparent; font-weight: 600; }
-  .opt:not(.active) .book { display: none; }
+  .legs { list-style: none; margin: 12px 0 0; padding: 0; }
+  .legs li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 6px 0; font-size: 14px; }
+  .legs .ldot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin: 5px 0 0 6px; }
+  .legs b { font-weight: 600; }
+  .legs .x { color: var(--ink-2); }
+  .why { margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
+  .flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .flags span { font-size: 12px; padding: 3px 8px; border-radius: 6px; background: var(--surface); color: var(--ink-2); }
 
-  /* Bar Crawl itinerary — a real sequence, so numbered stops on a vertical line. */
-  .crawl { margin-top: 6px; }
-  .crawl .stop { position: relative; display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 10px 0; }
-  .crawl .stop::before { content: ""; position: absolute; left: 13px; top: 0; bottom: 0; border-left: 2px solid var(--orange); }
-  .crawl .stop:first-child::before { top: 22px; }
-  .crawl .stop.last::before { bottom: calc(100% - 22px); }
-  .crawl .numdot { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%;
-                   background: var(--orange); color: var(--orange-ink); display: grid; place-items: center;
-                   font: 700 15px/1 var(--display); }
-  .crawl .numdot.walk { width: 14px; height: 14px; margin: 6px 7px; background: var(--paper);
-                        border: 2px solid var(--m-walk); }
-  .crawl .numdot.ride { width: 14px; height: 14px; margin: 6px 7px; background: var(--ink); }
-  .crawl h3 { font: 700 19px/1.2 var(--display); margin: 0; }
+  /* Loading skeleton */
+  .skel { display: grid; grid-template-columns: 62px 1fr 60px; gap: 12px; align-items: center; padding: 14px 0; }
+  .skel i { display: block; height: 14px; border-radius: 7px; background: var(--surface); }
+  .skel i:first-child { height: 30px; border-radius: 15px; }
+  .skel i:nth-child(2) { width: 70%; }
+  .loading .skel i { background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%) 0 0 / 200% 100%;
+                     animation: shimmer 1.2s linear infinite; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .loading-msg { font-size: 14px; color: var(--ink-2); margin-top: 6px; }
+
+  /* Bar Crawl timeline (a real sequence, so numbered) */
+  .crawl .stop { position: relative; display: grid; grid-template-columns: 32px 1fr; gap: 12px; padding: 10px 0; }
+  .crawl .stop::before { content: ""; position: absolute; left: 13px; top: 0; bottom: 0; width: 2px; background: var(--rule); }
+  .crawl .stop:first-child::before { top: 20px; }
+  .crawl .stop.last::before { bottom: calc(100% - 20px); }
+  .crawl .n { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: var(--bg);
+              display: grid; place-items: center; font: 700 15px/1 var(--display); }
+  .crawl .n.walk { width: 12px; height: 12px; margin: 8px; background: var(--bg); border: 2px solid var(--m-walk); }
+  .crawl .n.ride { width: 12px; height: 12px; margin: 8px; border-radius: 2px; }
+  .crawl h3 { font: 700 18px/1.2 var(--display); margin: 0; }
   .crawl .t { font-size: 14px; color: var(--ink-2); }
-  .crawl .hopline { font-size: 14px; color: var(--ink-2); padding-top: 3px; }
   .crawl a { color: var(--focus); }
-  .pin { width: 26px; height: 26px; border-radius: 50%; background: var(--orange); color: #fff;
-         display: grid; place-items: center; font: 700 14px/1 var(--display); border: 2px solid #fff;
-         box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
-  td, th { text-align: left; padding: 5px 4px; border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--rule); vertical-align: top; }
   th { color: var(--ink-2); font-weight: 600; }
-  #rejected ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-2); }
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin-top: 22px; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .legend i { width: 18px; height: 4px; border-radius: 2px; background: var(--c); }
-  .legend i.walk { background: radial-gradient(circle, var(--c) 1.8px, transparent 2.2px) 0 50% / 6px 4px repeat-x; }
+  #rejected ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--ink-2); }
 
-  .modal { position: fixed; inset: 0; background: rgb(14 25 35 / .55); display: none;
-           align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
+  /* Map chrome */
+  .leaflet-container { font-family: var(--body); background: var(--surface); }
+  .leaflet-control-zoom { border: 0 !important; box-shadow: var(--shadow) !important; border-radius: 10px !important; overflow: hidden; }
+  .leaflet-control-zoom a { background: var(--bg) !important; color: var(--ink) !important; border-color: var(--rule) !important; }
+  .leaflet-tooltip.eta { background: #000; color: #fff; border: 0; border-radius: 6px; font: 600 12px/1 var(--body);
+                         padding: 6px 8px; box-shadow: 0 2px 6px rgb(0 0 0 / .3); }
+  .leaflet-tooltip.eta::before { border-top-color: #000; }
+  .m-dest { width: 16px; height: 16px; background: #000; border: 3px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .4); }
+  .m-orig { width: 16px; height: 16px; border-radius: 50%; background: #000; border: 3px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .4); }
+  .pin { width: 28px; height: 28px; border-radius: 50%; background: #000; color: #fff; display: grid; place-items: center;
+         font: 700 14px/1 var(--display); border: 2px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .4); }
+
+  .modal { position: fixed; inset: 0; z-index: 50; background: rgb(0 0 0 / .45); display: none; align-items: flex-end; justify-content: center; }
   .modal.open { display: flex; }
-  .modal > div { background: var(--paper); border-radius: 12px; padding: 22px; max-width: 380px; width: 100%; }
-  .modal h3 { font: 700 24px/1.1 var(--display); margin: 0 0 8px; }
+  .modal > div { width: 100%; max-width: 440px; background: var(--bg); border-radius: 16px 16px 0 0; padding: 22px 20px calc(20px + env(safe-area-inset-bottom)); }
+  .modal h3 { font: 700 26px/1.1 var(--display); margin: 0 0 6px; }
+  @media (min-width: 900px) { .modal { align-items: center; } .modal > div { border-radius: 16px; } }
 
-  .leaflet-container { font-family: var(--body); }
-  .leaflet-tooltip { font: 500 13px/1.3 var(--body); border-radius: 6px; padding: 4px 8px; }
-
-  @media (max-width: 860px) {
-    .app { grid-template-columns: 1fr; grid-template-rows: auto auto; height: auto; }
-    /* Above every positioned element in the panel (stop dots, line diagram) while scrolling. */
-    #map { order: 0; height: 42vh; position: sticky; top: 0; z-index: 10; }
-    aside { order: 1; border-right: 0; padding: 18px 16px 40px; }
-    h1 { font-size: 32px; }
-    .mode small { font-size: 11px; }
-    .headline .big { font-size: 30px; }
+  /* Phones: bottom sheet with a drag handle */
+  @media (max-width: 899px) {
+    .panel { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: var(--sheet); border-radius: 18px 18px 0 0;
+             transition: height .25s cubic-bezier(.3,.7,.2,1); }
+    .panel.dragging { transition: none; }
+    .handle { display: block; flex: none; height: 22px; touch-action: none; cursor: grab; position: relative; }
+    .handle::after { content: ""; position: absolute; left: 50%; top: 9px; width: 40px; height: 5px; margin-left: -20px;
+                     border-radius: 3px; background: var(--surface-2); }
+    .scroll { padding-top: 4px; }
+    .brand h1 { font-size: 24px; }
   }
-  @media (max-width: 380px) { .mode small { display: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .draw .seg .bar, .loading .skel i { animation: none; }
+    .panel { transition: none; }
+  }
 </style>
 </head>
 <body>
-<div class="app">
-  <aside>
-    <div class="brand">
-      <svg width="44" height="16" viewBox="0 0 44 16" aria-hidden="true">
-        <line x1="8" y1="8" x2="22" y2="8" stroke="var(--m-walk)" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 5"/>
-        <line x1="22" y1="8" x2="36" y2="8" stroke="var(--orange)" stroke-width="4" stroke-linecap="round"/>
-        <circle cx="6" cy="8" r="4.5" fill="var(--ink)"/>
-        <circle cx="22" cy="8" r="3.5" fill="var(--paper)" stroke="var(--ink)" stroke-width="2"/>
-        <circle cx="38" cy="8" r="4" fill="var(--paper)" stroke="var(--orange)" stroke-width="3"/>
-      </svg>
-      <h1>Hopper</h1>
+<div id="map" aria-label="Map"></div>
+
+<section class="panel" id="panel" aria-label="Trip planner">
+  <div class="handle" id="handle" role="button" tabindex="0" aria-label="Resize panel"></div>
+  <div class="scroll" id="scroll">
+
+    <!-- Plan view -->
+    <div id="view-plan">
+      <div class="brand">
+        <svg width="40" height="14" viewBox="0 0 40 14" aria-hidden="true">
+          <line x1="7" y1="7" x2="20" y2="7" stroke="var(--m-walk)" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 5"/>
+          <line x1="20" y1="7" x2="33" y2="7" stroke="var(--orange)" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="5" cy="7" r="4.5" fill="var(--ink)"/>
+          <circle cx="20" cy="7" r="3.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="2"/>
+          <rect x="31" y="3" width="8" height="8" rx="1.5" fill="var(--ink)"/>
+        </svg>
+        <h1>Hopper</h1>
+        <span class="who">San Francisco</span>
+      </div>
+
+      <div id="trip-form">
+        <div class="route">
+          <span class="o" aria-hidden="true"></span><span class="d" aria-hidden="true"></span>
+          <select id="from" aria-label="Pickup"></select>
+          <div class="sep"></div>
+          <select id="to" aria-label="Where to"></select>
+          <button class="swap" id="swap" type="button" aria-label="Swap start and destination">
+            <svg class="i" viewBox="0 0 24 24"><path d="M7 4v16M7 4 4 7M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"/></svg>
+          </button>
+        </div>
+        <div class="ask">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8zM19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+          <input id="q" type="text" autocomplete="off" aria-label="Describe your trip" placeholder="Or describe it: late, Castro to Salesforce Tower">
+        </div>
+      </div>
+
+      <div class="modes" id="modes" role="radiogroup" aria-label="Mode">
+        <button class="mode active" data-mode="hustle" role="radio" aria-checked="true">
+          <svg class="i" viewBox="0 0 24 24"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>Hustle <small>Fastest</small></button>
+        <button class="mode" data-mode="broke" role="radio" aria-checked="false">
+          <svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2c-.4-.9-1.5-1.5-2.8-1.5-1.6 0-2.8.8-2.8 2s1.1 1.7 2.8 2.1 2.8.9 2.8 2.2-1.2 2.1-2.8 2.1c-1.4 0-2.5-.6-2.9-1.6M12 6v1.7M12 16.1V18"/></svg>Broke <small>Budget</small></button>
+        <button class="mode" data-mode="barcrawl" role="radio" aria-checked="false">
+          <svg class="i" viewBox="0 0 24 24"><path d="M4 4h16l-8 9.5zM12 13.5V20M8 20h8"/></svg>Bar Crawl <small>Cool bars</small></button>
+        <button class="mode" data-mode="burn" role="radio" aria-checked="false">
+          <svg class="i" viewBox="0 0 24 24"><path d="M12 2.5c.6 3 4.5 5 4.5 10a4.5 4.5 0 0 1-9 0c0-2.4 1.2-3.8 2.3-4.8.1 2 .9 3.1 2.2 3.4-.4-3.2-.6-5.8 0-8.6z"/></svg>Burn <small>Transit + workout</small></button>
+      </div>
+
+      <div id="trip-pills" class="pills">
+        <label class="pill"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="hour-label">Leave now</span>
+          <select id="hour" aria-label="Leave at"></select></label>
+        <label class="pill"><svg class="i" viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.6-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/></svg><span id="weather-label">Live weather</span>
+          <select id="weather" aria-label="Weather"><option value="live">Live weather</option><option value="clear">Clear</option><option value="fog">Fog</option><option value="rain">Rain</option></select></label>
+        <label class="pill">$ <input id="budget" type="number" min="0" placeholder="Any" aria-label="Budget in dollars"></label>
+        <label class="pill toggle"><input id="event" type="checkbox">Game night</label>
+        <label class="pill toggle"><input id="steep" type="checkbox">No steep hills</label>
+      </div>
+
+      <div id="crawl-form" hidden>
+        <div class="route" style="margin-top:6px">
+          <span class="o" aria-hidden="true"></span><span class="d" aria-hidden="true"></span>
+          <select id="c-start" aria-label="Start near"></select>
+          <div class="sep"></div>
+          <select id="c-end" aria-label="Ride home to"></select>
+        </div>
+        <div class="pills">
+          <label class="pill"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="c-hour-label">8 pm</span>
+            <select id="c-hour" aria-label="Start at"></select></label>
+          <label class="pill"><span id="c-stops-label">3 bars</span>
+            <select id="c-stops" aria-label="Number of bars"><option value="2">2 bars</option><option value="3" selected>3 bars</option><option value="4">4 bars</option><option value="5">5 bars</option></select></label>
+          <label class="pill"><span id="c-mins-label">45 min each</span>
+            <select id="c-mins" aria-label="Minutes at each bar"><option value="30">30 min each</option><option value="45" selected>45 min each</option><option value="60">60 min each</option><option value="90">90 min each</option></select></label>
+          <label class="pill toggle"><input id="c-age" type="checkbox">I'm 21+</label>
+        </div>
+        <div class="vibes" id="vibes" aria-label="Vibe"></div>
+        <p class="fine">Bars come from OpenStreetMap, which has no ratings. Picks favor SF landmarks, well-documented bars, and your vibe. Drink responsibly, and never drive.</p>
+      </div>
+
+      <div id="error" class="error" role="alert"></div>
+      <div id="notice" class="notice" role="status" hidden></div>
+
+      <div id="popular">
+        <h3 class="section-title">Popular right now</h3>
+        <ul class="places" id="places"></ul>
+      </div>
+
+      <details class="more" id="advanced">
+        <summary>Fine-tune and profile</summary>
+        <div class="sliders">
+          <div class="slider"><span>Time</span><input id="w-time" type="range" min="0" max="3" step="0.5" value="3" aria-label="Time weight"><b id="v-time">3</b></div>
+          <div class="slider"><span>Cost</span><input id="w-cost" type="range" min="0" max="3" step="0.5" value="0.5" aria-label="Cost weight"><b id="v-cost">0.5</b></div>
+          <div class="slider"><span>Health</span><input id="w-health" type="range" min="0" max="3" step="0.5" value="0" aria-label="Health weight"><b id="v-health">0</b></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label for="kg">Weight (kg)</label><input id="kg" type="number" value="75" min="30" max="200"></div>
+          <div class="field"><label for="leg">Longest walk</label><input id="leg" type="number" value="2.0" step="0.1" min="0.1"></div>
+          <div class="field"><label for="total">Total walk</label><input id="total" type="number" value="3.0" step="0.1" min="0.1"></div>
+        </div>
+        <p class="fine">Moving a slider leaves the Mode and uses your own weights. Distances are in miles.</p>
+      </details>
     </div>
-    <p class="tag">Walk a bit, ride a bit, and get there your way. San Francisco only.</p>
 
-    <div class="modes" id="modes" role="radiogroup" aria-label="How do you want to get there?">
-      <button class="mode active" data-mode="hustle" role="radio" aria-checked="true" title="Fastest">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>
-        <b>Hustle</b><small>Fastest</small></button>
-      <button class="mode" data-mode="broke" role="radio" aria-checked="false" title="Budget">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.2c-.4-.9-1.5-1.5-2.8-1.5-1.6 0-2.8.8-2.8 2s1.1 1.7 2.8 2.1 2.8.9 2.8 2.2-1.2 2.1-2.8 2.1c-1.4 0-2.5-.6-2.9-1.6M12 6v1.7M12 16.1V18"/></svg>
-        <b>Broke</b><small>Budget</small></button>
-      <button class="mode" data-mode="barcrawl" role="radio" aria-checked="false" title="Hit cool bars">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16l-8 9.5zM12 13.5V20M8 20h8M15 4l2.5-2"/></svg>
-        <b>Bar Crawl</b><small>Cool bars</small></button>
-      <button class="mode" data-mode="burn" role="radio" aria-checked="false" title="Part transit, part workout">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.6 3 4.5 5 4.5 10a4.5 4.5 0 0 1-9 0c0-2.4 1.2-3.8 2.3-4.8.1 2 .9 3.1 2.2 3.4-.4-3.2-.6-5.8 0-8.6z"/></svg>
-        <b>Burn</b><small>Transit + workout</small></button>
+    <!-- Results view -->
+    <div id="view-results" hidden>
+      <div class="rhead">
+        <button class="back" id="back" type="button" aria-label="Back to planning">
+          <svg class="i" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <div><h2 id="r-title"></h2><p id="r-sub"></p></div>
+      </div>
+      <div class="modes" id="modes-r" role="radiogroup" aria-label="Mode"></div>
+      <div class="conditions" id="conditions"></div>
+      <div id="r-notice" class="notice" role="status" hidden></div>
+      <div class="opts" id="results" aria-live="polite"></div>
+      <details class="more" id="trace-box" hidden><summary>How the agents planned this</summary><div id="trace"></div></details>
+      <details class="more" id="rej-box" hidden><summary>Trips the checker ruled out</summary><div id="rejected"></div></details>
+      <p class="fine">Ride prices are simulated estimates, not Uber or Lyft quotes. Transit and bike fares are approximate, calories are estimates, and booking is a demo.</p>
     </div>
+  </div>
 
-    <div id="trip-form">
-      <div class="ask">
-        <label class="field-label" for="q">Where to?</label>
-        <input id="q" type="text" autocomplete="off" placeholder="Late for a meeting, Castro to Salesforce Tower">
-      </div>
-      <div class="or">or pick two stops</div>
-      <div class="stops-pick">
-        <div class="rail" aria-hidden="true"><i></i><i></i></div>
-        <div><label class="field-label" for="from">From</label><select id="from"></select></div>
-        <div><label class="field-label" for="to">To</label><select id="to"></select></div>
-      </div>
-      <div class="grid3">
-        <div><label class="field-label" for="hour">Leave at</label><select id="hour"></select></div>
-        <div><label class="field-label" for="weather">Weather</label>
-          <select id="weather"><option value="live">Live forecast</option><option value="clear">Clear</option><option value="fog">Fog</option><option value="rain">Rain</option></select></div>
-        <div><label class="field-label" for="budget">Budget ($)</label><input id="budget" type="number" min="0" placeholder="Any"></div>
-      </div>
-      <div class="toggles">
-        <label class="toggle"><input id="event" type="checkbox"> Game night</label>
-        <label class="toggle"><input id="steep" type="checkbox"> Avoid steep hills</label>
-      </div>
-      <button id="go" class="go">Plan my trip</button>
-    </div>
+  <div class="cta-bar"><button class="cta" id="cta">See trips</button></div>
+</section>
 
-    <div id="crawl-form" style="display:none">
-      <div class="stops-pick" style="margin-top:20px">
-        <div class="rail" aria-hidden="true"><i></i><i></i></div>
-        <div><label class="field-label" for="c-start">Start near</label><select id="c-start"></select></div>
-        <div><label class="field-label" for="c-end">Ride home to</label><select id="c-end"></select></div>
-      </div>
-      <div class="grid3">
-        <div><label class="field-label" for="c-hour">Start at</label><select id="c-hour"></select></div>
-        <div><label class="field-label" for="c-stops">Bars</label><select id="c-stops"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></div>
-        <div><label class="field-label" for="c-mins">Minutes at each</label><select id="c-mins"><option>30</option><option selected>45</option><option>60</option><option>90</option></select></div>
-      </div>
-      <span class="field-label" style="margin-top:14px">Vibe</span>
-      <div class="vibes" id="vibes"></div>
-      <div class="toggles">
-        <label class="toggle"><input id="c-age" type="checkbox"> I'm 21 or older</label>
-      </div>
-      <button id="c-go" class="go">Plan my crawl</button>
-      <p class="fine">Bars come from OpenStreetMap, which has no ratings. Picks favor SF landmarks, well-documented bars, and your vibe. Drink responsibly, and never drive.</p>
-    </div>
-    <div id="error" class="error" role="alert"></div>
-
-    <details id="advanced">
-      <summary>Fine-tune weights and your profile</summary>
-      <div class="sliders">
-        <div class="slider"><span>Time</span><input id="w-time" type="range" min="0" max="3" step="0.5" value="3" aria-label="Time weight"><b id="v-time">3</b></div>
-        <div class="slider"><span>Cost</span><input id="w-cost" type="range" min="0" max="3" step="0.5" value="0.5" aria-label="Cost weight"><b id="v-cost">0.5</b></div>
-        <div class="slider"><span>Health</span><input id="w-health" type="range" min="0" max="3" step="0.5" value="0" aria-label="Health weight"><b id="v-health">0</b></div>
-      </div>
-      <div class="grid3" style="margin-top:0">
-        <div><label class="field-label" for="kg">Weight (kg)</label><input id="kg" type="number" value="75" min="30" max="200"></div>
-        <div><label class="field-label" for="leg">Longest walk (mi)</label><input id="leg" type="number" value="2.0" step="0.1" min="0.1"></div>
-        <div><label class="field-label" for="total">Total walking (mi)</label><input id="total" type="number" value="3.0" step="0.1" min="0.1"></div>
-      </div>
-      <p class="fine">Moving a slider leaves the Mode and uses your own weights.</p>
-    </details>
-    <div id="notice" class="notice" style="display:none" role="status"></div>
-
-    <div id="results-head" class="results-head" style="display:none">
-      <h2 id="meta"></h2>
-      <p id="meta-sub"></p>
-      <div class="conditions"><span id="wx" class="wx"></span><span id="sources" style="display:contents"></span></div>
-    </div>
-    <div id="results"></div>
-
-    <details id="trace-box" style="display:none">
-      <summary>How the agents planned this</summary>
-      <div id="trace"></div>
-    </details>
-    <details id="rej-box" style="display:none">
-      <summary>Trips the checker ruled out</summary>
-      <div id="rejected"></div>
-    </details>
-    <div class="legend" id="legend"></div>
-    <p class="fine">Ride prices are simulated estimates, not Uber or Lyft quotes. Transit and bike fares are approximate, calories are estimates, and booking is a demo.</p>
-  </aside>
-  <div id="map" aria-label="Trip map"></div>
-</div>
-
-<div class="modal" id="modal" role="dialog" aria-modal="true"><div id="modal-body"></div></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div id="modal-body"></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const MODE_NAMES = { walk: "Walk", ride: "Ride", muni: "Muni", bart: "BART", cable: "Cable car", bike: "Bike", ebike: "E-bike" };
-let COLORS = {}, PLACES = [], plan = null, options = [], active = 0, layer = null, rerankTimer = null;
-let mode = "hustle", vibe = "any";
+const ICONS = {
+  walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2.2-6.5 2.8 2.5V21M8.5 12.5l1.8-4 3.4.6 2.3 3.4M12.2 14.5 11 9"/>',
+  ride: '<path d="M5 17v-5l2-5.5h10L19 12v5M5 17h14M7.5 17v2M16.5 17v2M5 12h14"/><circle cx="8" cy="14.5" r=".6"/><circle cx="16" cy="14.5" r=".6"/>',
+  muni: '<rect x="6" y="4" width="12" height="13" rx="2.5"/><path d="M6 11h12M9 20l-1 2M15 20l1 2M10 2h4M12 2v2"/>',
+  bart: '<rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 10h14M9 21l1-4M15 21l-1-4M8.5 13.5h.01M15.5 13.5h.01"/>',
+  cable: '<path d="M3 3l18 3M12 4.5V8M5.5 8h13l1 9h-15zM8 17v2.5M16 17v2.5M9 11h6"/>',
+  bike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-7h5l3 7M10 9 9 6.5H7M15 9l1-2.5h1.5"/>',
+  ebike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-7h5l3 7M13 5l-1.5 3h2l-1.5 3"/>',
+};
+const icon = (m) => `<svg class="i" viewBox="0 0 24 24">${ICONS[m] || ""}</svg>`;
+const POPULAR = [
+  ["oracle_park", "Giants games and the waterfront"], ["ferry_building", "Food hall on the Embarcadero"],
+  ["sfo", "Flights, via BART or a ride"], ["golden_gate_park", "de Young and the park"],
+  ["chase_center", "Warriors and concerts"], ["coit_tower", "Telegraph Hill views"],
+];
+let COLORS = {}, PLACES = [], NAMES = {}, plan = null, options = [], active = 0, layer = null, rerankTimer = null;
+let mode = "hustle", vibe = "any", view = "plan", crawlData = null;
 const MODE_WEIGHTS = { hustle: [3, 0.5, 0], broke: [0.5, 3, 0.5], burn: [0.5, 0.5, 3] };
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const cvar = (m) => `var(--m-${m})`;
+const isPhone = () => matchMedia("(max-width: 899px)").matches;
+const dark = () => matchMedia("(prefers-color-scheme: dark)").matches;
 
-const map = L.map("map", { zoomControl: true }).setView([37.773, -122.431], 13);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19, attribution: "&copy; OpenStreetMap contributors, routes by OSRM / FOSSGIS" }).addTo(map);
+// Map — muted gray canvas basemap (no API key) so routes carry the color.
+const map = L.map("map", { zoomControl: false, attributionControl: true }).setView([37.773, -122.431], 13);
+L.control.zoom({ position: "topright" }).addTo(map);
+const esri = (layer) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${layer}/MapServer/tile/{z}/{y}/{x}`;
+const canvasLayers = () => dark() ? ["World_Dark_Gray_Base", "World_Dark_Gray_Reference"] : ["World_Light_Gray_Base", "World_Light_Gray_Reference"];
+const [baseName, refName] = canvasLayers();
+const tiles = L.tileLayer(esri(baseName), { maxZoom: 19, maxNativeZoom: 16,
+  attribution: 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors; routes OSRM' }).addTo(map);
+const labels = L.tileLayer(esri(refName), { maxZoom: 19, maxNativeZoom: 16, pane: "overlayPane" }).addTo(map);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  const [b, r] = canvasLayers(); tiles.setUrl(esri(b)); labels.setUrl(esri(r));
+});
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function hourLabel(h) { return h === 0 ? "12 am" : h < 12 ? `${h} am` : h === 12 ? "12 pm" : `${h - 12} pm`; }
 function weights() { return { time: +$("w-time").value, cost: +$("w-cost").value, health: +$("w-health").value }; }
-function mins(m) { m = Math.round(m); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`; }
+function mins(m) { m = Math.round(m); return m >= 60 ? `${Math.floor(m / 60)} hr ${m % 60} min` : `${m} min`; }
+const sfNow = () => new Date(new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+const sfHour = () => sfNow().getHours();
+function clock(d) { return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase(); }
+function arrival(totalMin, hour) {
+  const start = sfNow();
+  if (hour !== sfHour()) start.setHours(hour, 0, 0, 0);
+  return clock(new Date(start.getTime() + totalMin * 60000));
+}
 
 async function init() {
   const r = await fetch("api/places").then(r => r.json());
   PLACES = r.places; COLORS = r.colors;
+  for (const p of PLACES) NAMES[p.key] = p.name;
   const opts = PLACES.map(p => `<option value="${p.key}">${esc(p.name)}</option>`).join("");
   $("from").innerHTML = opts; $("to").innerHTML = opts;
   $("from").value = "ferry_building"; $("to").value = "coit_tower";
-  $("hour").innerHTML = [...Array(24).keys()].map(h => `<option value="${h}">${hourLabel(h)}</option>`).join("");
-  // Default to "now" in San Francisco, whatever the viewer's own time zone is.
-  $("hour").value = +new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", hourCycle: "h23" }).format(new Date());
-  $("legend").innerHTML = Object.keys(COLORS).map(m =>
-    `<span><i class="${m === "walk" ? "walk" : ""}" style="--c:${cvar(m)}"></i>${MODE_NAMES[m]}</span>`).join("");
+  const hours = [...Array(24).keys()].map(h => `<option value="${h}">${h === sfHour() ? "Leave now" : "Leave at " + hourLabel(h)}</option>`).join("");
+  $("hour").innerHTML = hours; $("hour").value = sfHour();
+  $("c-hour").innerHTML = [...Array(24).keys()].map(h => `<option value="${h}">${hourLabel(h)}</option>`).join(""); $("c-hour").value = 20;
   $("c-start").innerHTML = opts; $("c-start").value = "washington_sq";
   $("c-end").innerHTML = `<option value="">No ride home</option>` + opts; $("c-end").value = "hayes_valley";
-  $("c-hour").innerHTML = $("hour").innerHTML; $("c-hour").value = 20;
   $("vibes").innerHTML = Object.entries(r.vibes).map(([k, label]) =>
     `<button type="button" data-vibe="${k}" aria-pressed="${k === vibe}" class="${k === vibe ? "on" : ""}">${esc(label)}</button>`).join("");
+  $("places").innerHTML = POPULAR.filter(([k]) => NAMES[k]).map(([k, s]) => `<li><button type="button" data-place="${k}">
+      <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg></span>
+      <span><b>${esc(NAMES[k])}</b><span class="s">${esc(s)}</span></span></button></li>`).join("");
+  $("modes-r").innerHTML = $("modes").innerHTML;
+  syncPills(); setSheet(isPhone() ? "mid" : null);
+}
+
+function syncPills() {
+  const h = +$("hour").value;
+  $("hour-label").textContent = h === sfHour() ? "Leave now" : `Leave at ${hourLabel(h)}`;
+  $("weather-label").textContent = $("weather").selectedOptions[0].textContent;
+  $("c-hour-label").textContent = `Start ${hourLabel(+$("c-hour").value)}`;
+  $("c-stops-label").textContent = $("c-stops").selectedOptions[0].textContent;
+  $("c-mins-label").textContent = $("c-mins").selectedOptions[0].textContent;
+}
+
+// ── Bottom sheet (phones) ────────────────────────────────────────────────────
+const SHEET = { peek: 34, mid: 58, full: 88 };
+function setSheet(state) {
+  if (!isPhone()) { $("panel").style.removeProperty("--sheet"); return; }
+  document.documentElement.style.setProperty("--sheet", SHEET[state] + "vh");
+  setTimeout(() => (layer ? frame() : map.invalidateSize()), 280);   // after the sheet transition
+}
+(() => {
+  const h = $("handle"), panel = $("panel");
+  let startY = 0, startH = 0;
+  h.addEventListener("pointerdown", e => {
+    startY = e.clientY; startH = panel.getBoundingClientRect().height;
+    panel.classList.add("dragging"); h.setPointerCapture(e.pointerId);
+  });
+  h.addEventListener("pointermove", e => {
+    if (!panel.classList.contains("dragging")) return;
+    const vh = Math.min(92, Math.max(20, (startH + startY - e.clientY) / innerHeight * 100));
+    document.documentElement.style.setProperty("--sheet", vh + "vh");
+  });
+  h.addEventListener("pointerup", () => {
+    panel.classList.remove("dragging");
+    const vh = panel.getBoundingClientRect().height / innerHeight * 100;
+    const snap = Object.entries(SHEET).sort((a, b) => Math.abs(a[1] - vh) - Math.abs(b[1] - vh))[0][0];
+    setSheet(snap);
+  });
+  h.addEventListener("keydown", e => {
+    if (e.key === "ArrowUp") setSheet("full");
+    if (e.key === "ArrowDown") setSheet("peek");
+  });
+})();
+
+// ── Views ────────────────────────────────────────────────────────────────────
+function showView(v) {
+  view = v;
+  $("view-plan").hidden = v !== "plan";
+  $("view-results").hidden = v !== "results";
+  $("scroll").scrollTop = 0;
+  updateCta();
+}
+
+function updateCta() {
+  const cta = $("cta");
+  cta.disabled = false;
+  if (view === "plan") { cta.textContent = mode === "barcrawl" ? "Plan my crawl" : "See trips"; return; }
+  if (crawlData) {
+    const r = crawlData.itinerary.ride_home;
+    cta.textContent = r ? `Book ride home for $${r.cost.toFixed(2)}` : "Start the crawl";
+    return;
+  }
+  const o = options[active];
+  if (!o) { cta.textContent = mode === "barcrawl" ? "Finding bars…" : "Finding trips…"; cta.disabled = true; return; }
+  const ride = o.legs.some(l => l.mode === "ride");
+  cta.textContent = o.cost === 0 ? "Start walking" : ride ? `Book for $${o.cost.toFixed(2)}` : `Go for $${o.cost.toFixed(2)}`;
 }
 
 function setMode(m, { rerank = true } = {}) {
@@ -389,64 +527,70 @@ function setMode(m, { rerank = true } = {}) {
     b.classList.toggle("active", on); b.setAttribute("aria-checked", on);
   });
   const crawl = m === "barcrawl";
-  $("trip-form").style.display = crawl ? "none" : "";
-  $("crawl-form").style.display = crawl ? "" : "none";
+  $("trip-form").hidden = crawl; $("trip-pills").hidden = crawl;
+  $("crawl-form").hidden = !crawl; $("popular").hidden = crawl;
   $("error").textContent = "";
   if (MODE_WEIGHTS[m]) {
     const [t, c, h] = MODE_WEIGHTS[m];
     $("w-time").value = t; $("w-cost").value = c; $("w-health").value = h;
     for (const k of ["time", "cost", "health"]) $("v-" + k).textContent = $("w-" + k).value;
   }
-  if (crawl) { clearResults(); return; }
-  if (rerank && plan) rerankNow();
+  if (crawl) {
+    if (view === "results" && !crawlData) { showView("plan"); clearMap(); }
+    updateCta(); return;
+  }
+  if (view === "results" && crawlData) { showView("plan"); clearMap(); crawlData = null; }
+  if (rerank && plan && view === "results") rerankNow();
+  updateCta();
 }
 
-function clearResults() {
-  for (const id of ["results", "meta", "meta-sub", "sources", "wx"]) $(id).innerHTML = "";
-  for (const id of ["results-head", "notice", "trace-box", "rej-box"]) $(id).style.display = "none";
-  if (layer) { map.removeLayer(layer); layer = null; }
+function clearMap() { if (layer) { map.removeLayer(layer); layer = null; } lastBounds = null; }
+function notice(id, text) { $(id).hidden = !text; $(id).textContent = text || ""; }
+
+function showLoading(title, sub, msg) {
+  crawlData = null; plan = null; options = [];
+  showView("results");
+  $("r-title").textContent = title; $("r-sub").textContent = sub;
+  $("conditions").innerHTML = ""; notice("r-notice", "");
+  $("trace-box").hidden = true; $("rej-box").hidden = true;
+  $("results").innerHTML = `<div class="loading">${'<div class="skel"><i></i><i></i><i></i></div>'.repeat(3)}</div><p class="loading-msg">${esc(msg)}</p>`;
+  updateCta(); setSheet("mid");
 }
 
-function showNotice(text) {
-  $("notice").style.display = text ? "block" : "none";
-  $("notice").textContent = text || "";
-}
-
+// ── Trips ────────────────────────────────────────────────────────────────────
 async function planTrip() {
-  $("error").textContent = ""; $("go").disabled = true; $("go").textContent = "Planning…";
+  $("error").textContent = "";
+  const query = $("q").value.trim();
   const body = {
-    query: $("q").value, origin: $("from").value, destination: $("to").value,
+    query, origin: $("from").value, destination: $("to").value,
     hour: +$("hour").value, weather: $("weather").value, event: $("event").checked,
     avoid_steep: $("steep").checked, weight_kg: +$("kg").value,
     max_walk_leg_mi: +$("leg").value, max_total_walk_mi: +$("total").value,
     max_cost: $("budget").value === "" ? null : +$("budget").value, mode, weights: weights(),
   };
+  showLoading(query ? "Reading your request" : `${NAMES[body.origin]} to ${NAMES[body.destination]}`,
+              "Comparing walking, rides, Muni, BART, and bikes", "Checking live arrivals, weather, and street routes…");
   try {
     const res = await fetch("api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Something went wrong");
+    if (!res.ok) throw new Error(data.error || "Couldn't plan that trip. Try different stops.");
     if (data.redirect === "barcrawl") {
-      // The Intent agent heard "bars" — hand over to the crawl planner (21+ gate).
-      setMode("barcrawl");
+      showView("plan"); setMode("barcrawl");
       if (data.start) $("c-start").value = data.start;
       if (data.end) $("c-end").value = data.end;
-      $("c-hour").value = data.hour;
-      showNotice("Sounds like a night out. Confirm you're 21 or older, pick a vibe, and plan your crawl.");
+      $("c-hour").value = data.hour; syncPills();
+      notice("notice", "Sounds like a night out. Confirm you're 21 or older, pick a vibe, and plan your crawl.");
       return;
     }
     plan = data; options = data.options; active = 0;
-    // Reflect what the Intent agent understood back into the form.
     const rq = data.request;
     $("from").value = rq.origin; $("to").value = rq.destination; $("hour").value = rq.hour;
     $("weather").value = rq.weather; $("event").checked = rq.event; $("steep").checked = rq.avoid_steep;
     if (rq.max_cost != null) $("budget").value = rq.max_cost;
     if (rq.mode && rq.mode !== mode && MODE_WEIGHTS[rq.mode]) setMode(rq.mode, { rerank: false });
-    showNotice(data.notice);
-    renderAll(true);
+    syncPills(); renderPlan(true);
   } catch (e) {
-    $("error").textContent = e.message;
-  } finally {
-    $("go").disabled = false; $("go").textContent = "Plan my trip";
+    showView("plan"); $("error").textContent = e.message;
   }
 }
 
@@ -455,192 +599,225 @@ async function rerankNow() {
   const res = await fetch("api/rerank", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ plan_id: plan.plan_id, mode, weights: weights() }) });
   const data = await res.json();
-  if (!res.ok) { $("error").textContent = data.error; return; }
-  options = data.options; active = 0; showNotice(data.notice); renderResults(true); drawTrip();
+  if (!res.ok) { notice("r-notice", data.error); return; }
+  options = data.options; active = 0; plan.notice = data.notice;
+  notice("r-notice", data.notice); renderOptions(true); drawTrip(); updateCta();
 }
 
-async function planCrawl() {
-  $("error").textContent = "";
-  if (!$("c-age").checked) { $("error").textContent = "Bar Crawl is for 21 and older. Confirm your age to continue."; return; }
-  $("c-go").disabled = true; $("c-go").textContent = "Finding bars…";
-  const body = { start: $("c-start").value, end: $("c-end").value, hour: +$("c-hour").value,
-    stops: +$("c-stops").value, minutes_per_stop: +$("c-mins").value, vibe,
-    weather: $("weather").value, event: $("event").checked, weight_kg: +$("kg").value, age_confirmed: true };
-  try {
-    const res = await fetch("api/crawl", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Something went wrong");
-    renderCrawl(data);
-  } catch (e) {
-    clearResults(); $("error").textContent = e.message;
-  } finally {
-    $("c-go").disabled = false; $("c-go").textContent = "Plan my crawl";
-  }
+function renderPlan(fresh) {
+  const s = plan.stats, lv = plan.live;
+  $("r-title").textContent = `${plan.origin_name} to ${plan.destination_name}`;
+  $("r-sub").textContent = `${hourLabel(plan.request.hour) === hourLabel(sfHour()) ? "Leaving now" : "Leaving at " + hourLabel(plan.request.hour)}. ${s.candidates} trips compared.`;
+  const w = lv.weather;
+  const conds = [
+    [w ? `${w.temp_f}°F, ${w.summary.toLowerCase()}` : lv.condition === "rain" ? "Rain" : lv.condition === "fog" ? "Fog" : "Clear", !!w],
+    [lv.routes.startsWith("OSRM") ? "Street routes" : "Estimated routes", lv.routes.startsWith("OSRM")],
+    [lv.transit === "511 live" ? "Live arrivals" : "Scheduled arrivals", lv.transit === "511 live"],
+  ];
+  if (s.llm) conds.push(["Claude agents", true]);
+  $("conditions").innerHTML = conds.map(([t, on]) => `<span class="cond ${on ? "on" : ""}"><span class="dot"></span>${esc(t)}</span>`).join("");
+  notice("r-notice", plan.notice);
+  renderOptions(fresh); renderTrace(); drawTrip(); updateCta();
 }
 
-function weatherText(w, condition) {
-  if (!w) return condition === "clear" ? "Clear" : condition === "rain" ? "Rain" : "Fog";
-  return `${w.temp_f}°F, ${esc(w.summary.toLowerCase())}, wind ${w.wind_mph} mph`;
-}
-
-function renderCrawl(d) {
-  clearResults(); showNotice("");
-  const it = d.itinerary, tot = it.totals;
-  $("results-head").style.display = "block";
-  $("meta").textContent = `${it.stops.length} bars from ${d.start_name}`;
-  $("meta-sub").textContent = `${mins(tot.minutes)}, done by ${tot.ends}. ${tot.walk_mi} mi of walking between bars` +
-    (it.ride_home ? `, then a $${it.ride_home.cost.toFixed(2)} ride home.` : ".");
-  $("wx").innerHTML = weatherText(d.weather, d.condition);
-  $("sources").innerHTML = `<span class="src on">${esc(d.source)}</span><span class="src on">${d.bars_considered} bars considered</span>`;
-  const rows = [];
-  it.stops.forEach((s, i) => {
-    const hop = it.walks[i];
-    rows.push(`<div class="stop"><span class="numdot walk" aria-hidden="true"></span>
-      <div class="hopline">Walk ${hop.distance_mi} mi, about ${Math.round(hop.minutes)} min</div></div>`);
-    const site = /^https?:\/\//i.test(s.website) ? ` <a href="${esc(s.website)}" target="_blank" rel="noopener noreferrer">Website</a>` : "";
-    rows.push(`<div class="stop"><span class="numdot">${i + 1}</span><div>
-        <h3>${esc(s.name)}</h3>
-        <div class="t">${esc(s.arrive)} to ${esc(s.leave)}</div>
-        <div class="t">${esc(s.why)}</div>
-        <div class="t">Hours: ${esc(s.hours)}.${site}</div>
-      </div></div>`);
-  });
-  if (it.ride_home) {
-    const r = it.ride_home;
-    rows.push(`<div class="stop last"><span class="numdot ride" aria-hidden="true"></span><div>
-      <h3>Ride home to ${esc(r.to_name)}</h3>
-      <div class="t">${r.distance_mi} mi, ${Math.round(r.minutes)} min plus ${r.wait_min} min pickup. $${r.cost.toFixed(2)}, simulated.</div></div></div>`);
-  } else rows[rows.length - 1] = rows[rows.length - 1].replace('class="stop"', 'class="stop last"');
-  let html = `<div class="crawl">${rows.join("")}</div>`;
-  if (it.notes.length) html += `<div class="flags">${it.notes.map(n => `<span>${esc(n)}</span>`).join("")}</div>`;
-  if (d.alternate.length) html += `<p class="why">Another option: ${d.alternate.map(a => esc(a.name)).join(", then ")}.</p>`;
-  $("results").innerHTML = html;
-  map.invalidateSize();
-  layer = L.featureGroup().addTo(map);
-  for (const h of it.walks) L.polyline(h.path, { color: COLORS.walk, weight: 5, dashArray: "1 9", lineCap: "round" }).addTo(layer);
-  if (it.ride_home) L.polyline(it.ride_home.path, { color: COLORS.ride, weight: 5, opacity: 0.85 }).bindTooltip("Ride home (simulated)").addTo(layer);
-  it.stops.forEach((s, i) => L.marker([s.lat, s.lon], { icon: L.divIcon({ className: "",
-    html: `<div class="pin">${i + 1}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }) })
-    .bindTooltip(`${i + 1}. ${s.name}, ${s.arrive}`).addTo(layer));
-  L.circleMarker(it.walks[0].path[0], { radius: 7, color: "#fff", weight: 2, fillColor: css("--ink") || "#18324a", fillOpacity: 1 }).bindTooltip(d.start_name).addTo(layer);
-  // Frame the bars, not the ride home — the crawl is the part you walk.
-  map.fitBounds(L.latLngBounds([it.walks[0].path[0], ...it.stops.map(s => [s.lat, s.lon])]), { padding: [50, 50], maxZoom: 17 });
-}
-
-function renderAll(fresh) {
-  const s = plan.stats;
-  $("results-head").style.display = "block";
-  $("meta").textContent = `${plan.origin_name} to ${plan.destination_name}`;
-  $("meta-sub").textContent = `${s.candidates} trips considered, ${s.feasible} passed every check.` +
-    (s.llm ? "" : " Claude is off, so plain-English questions use simple rules.");
-  renderLive(); renderResults(fresh); renderTrace(); drawTrip();
-}
-
-function renderLive() {
-  const lv = plan.live;
-  $("wx").innerHTML = weatherText(lv.weather, lv.condition) + (lv.weather ? "" : plan.request.weather === "live" ? " (assumed)" : "");
-  const src = (label, on) => `<span class="src ${on ? "on" : ""}">${esc(label)}</span>`;
-  $("sources").innerHTML = [
-    src(lv.routes.startsWith("OSRM") ? "Street routes" : "Estimated routes", lv.routes.startsWith("OSRM")),
-    src(lv.transit === "511 live" ? "Live arrivals" : "Scheduled arrivals", lv.transit === "511 live"),
-    src(lv.bikes === "GBFS live" ? "Live bike docks" : "Estimated bike docks", lv.bikes === "GBFS live"),
-  ].join("");
-}
-
-// "Best for Burn · Fastest · Cheapest" → "Best for Burn, also fastest and cheapest"
-function labelText(label) {
+// "Best for Burn · Fastest · Cheapest" → title "Best for Burn", tag "Also fastest and cheapest"
+function splitLabel(label) {
   const [first, ...rest] = label.split(" · ");
-  if (!rest.length) return first;
   const extra = rest.map(s => s.toLowerCase());
-  const list = extra.length > 1 ? `${extra.slice(0, -1).join(", ")} and ${extra.at(-1)}` : extra[0];
-  return `${first}, also ${list}`;
+  const tag = !extra.length ? "" : extra.length > 1 ? `Also ${extra.slice(0, -1).join(", ")} and ${extra.at(-1)}` : `Also ${extra[0]}`;
+  return { title: first, tag };
 }
 
 function legDetail(l) {
-  const bits = [`${l.distance_mi} mi`, mins(l.minutes) + (l.wait_min ? ` + ${Math.round(l.wait_min)} min wait` : "")];
+  const bits = [`${l.distance_mi} mi`, mins(l.minutes) + (l.wait_min ? `, ${Math.round(l.wait_min)} min wait` : "")];
   if (l.cost) bits.push(`$${l.cost.toFixed(2)}`);
   if (l.surge > 1) bits.push(`${l.surge}× surge`);
   if (l.mode === "walk" && l.grade > 0.04) bits.push("uphill");
   return bits.join(", ");
 }
 
-function renderResults(fresh) {
+function renderOptions(fresh) {
   $("results").innerHTML = options.map((o, i) => {
-    const total = o.legs.reduce((a, l) => a + l.minutes + l.wait_min, 0) || 1;
-    const segs = o.legs.map(l => `<div class="seg ${l.mode}" style="--c:${cvar(l.mode)};flex:${Math.max((l.minutes + l.wait_min) / total, 0.12)}">
-        <span class="tag2">${MODE_NAMES[l.mode]} ${Math.round(l.minutes + l.wait_min)}m</span><div class="bar"></div></div>`).join("");
-    const legs = o.legs.map(l => `<li style="--c:${cvar(l.mode)}"><span class="m">${MODE_NAMES[l.mode]}</span>
-        <span><span class="d">${l.line ? esc(l.line) + " to " : "To "}${esc(l.to_name)}</span><br>
-        <span class="x">${esc(legDetail(l))}${l.note ? `. ${esc(l.note)}` : ""}</span></span></li>`).join("");
-    return `<article class="opt ${i === active ? "active" : ""}" data-i="${i}" tabindex="0" aria-label="${esc(labelText(o.label))}">
-      <div class="label">${esc(labelText(o.label))}</div>
-      <div class="headline">
-        <span class="big">${Math.round(o.total_min)}<small>min</small></span>
-        <span class="big">$${o.cost.toFixed(2)}</span>
-        <span class="side"><b>${o.kcal}</b> kcal<br><b>${o.steps.toLocaleString()}</b> steps${o.climb_ft ? `, <b>${o.climb_ft}</b> ft up` : ""}</span>
-      </div>
-      <div class="line ${fresh ? "draw" : ""}" role="img" aria-label="${o.legs.map(l => MODE_NAMES[l.mode]).join(", then ")}">${segs}<span class="end-wrap"><span class="end"></span></span></div>
-      <ul class="legs">${legs}</ul>
-      ${o.why ? `<p class="why">${esc(o.why)}</p>` : ""}
-      ${o.flags.length ? `<div class="flags">${o.flags.map(f => `<span>${esc(f)}</span>`).join("")}</div>` : ""}
-      <button class="book" data-book="${i}">Book this trip</button>
-    </article>`;
+    const { title, tag } = splitLabel(o.label);
+    const modesUsed = o.legs.map(l => l.mode);
+    const glyphs = modesUsed.slice(0, 2).map(m => `<span class="glyph" style="--c:var(--m-${m})">${icon(m)}</span>`).join("")
+      + (modesUsed.length > 2 ? `<span class="glyph more">+${modesUsed.length - 2}</span>` : "");
+    const summary = [...new Set(o.legs.map(l => MODE_NAMES[l.mode]))].join(", then ").replace(/, then ([^,]+)$/, " and $1");
+    let detail = "";
+    if (i === active) {
+      const total = o.legs.reduce((a, l) => a + l.minutes + l.wait_min, 0) || 1;
+      const segs = o.legs.map(l => `<div class="seg ${l.mode}" style="--c:var(--m-${l.mode});flex:${Math.max((l.minutes + l.wait_min) / total, 0.12)}">
+          <span class="lbl">${MODE_NAMES[l.mode]} ${Math.round(l.minutes + l.wait_min)}m</span><div class="bar"></div></div>`).join("");
+      const legs = o.legs.map(l => `<li style="--c:var(--m-${l.mode})"><span class="ldot"></span>
+          <span><b>${MODE_NAMES[l.mode]}${l.line ? `, ${esc(l.line)}` : ""}</b> to ${esc(l.to_name)}<br>
+          <span class="x">${esc(legDetail(l))}${l.note ? `. ${esc(l.note)}` : ""}</span></span></li>`).join("");
+      detail = `<div class="detail">
+        <div class="line ${fresh ? "draw" : ""}" role="img" aria-label="${esc(summary)}">${segs}<span class="end-wrap"><span class="end"></span></span></div>
+        <ul class="legs">${legs}</ul>
+        ${o.why ? `<p class="why">${esc(o.why)}</p>` : ""}
+        ${o.flags.length ? `<div class="flags">${o.flags.map(f => `<span>${esc(f)}</span>`).join("")}</div>` : ""}
+      </div>`;
+    }
+    return `<div class="opt ${i === active ? "active" : ""}">
+      <button class="opt-head" data-i="${i}" aria-pressed="${i === active}">
+        <span class="glyphs">${glyphs}</span>
+        <span><span class="opt-title">${esc(title)}</span><br>
+          <span class="opt-sub">Arrive <b>${arrival(o.total_min, plan.request.hour)}</b>, ${mins(o.total_min)}</span><br>
+          <span class="opt-sub">${esc(summary)}</span>${tag ? `<br><span class="tagline">${esc(tag)}</span>` : ""}</span>
+        <span class="opt-price">${o.cost === 0 ? "Free" : "$" + o.cost.toFixed(2)}<small>${o.kcal} kcal</small></span>
+      </button>${detail}</div>`;
   }).join("");
 }
 
 function renderTrace() {
-  $("trace-box").style.display = "block";
+  $("trace-box").hidden = false;
   $("trace").innerHTML = `<table><tr><th>Agent</th><th>Ran as</th><th>ms</th><th>What it did</th></tr>` +
-    plan.trace.map(t => `<tr><td><b>${esc(t.agent)}</b></td><td>${esc(t.kind)}${t.model !== "—" ? `<br>${esc(t.model)}` : ""}</td><td class="num-tab">${t.ms}</td><td>${esc(t.detail)}${t.tokens ? ` (${t.tokens} tokens)` : ""}</td></tr>`).join("") + "</table>";
-  $("rej-box").style.display = plan.rejected.length ? "block" : "none";
+    plan.trace.map(t => `<tr><td><b>${esc(t.agent)}</b></td><td>${esc(t.kind)}${t.model !== "—" ? `<br>${esc(t.model)}` : ""}</td><td>${t.ms}</td><td>${esc(t.detail)}${t.tokens ? ` (${t.tokens} tokens)` : ""}</td></tr>`).join("") + "</table>";
+  $("rej-box").hidden = !plan.rejected.length;
   $("rejected").innerHTML = "<ul>" + plan.rejected.map(r => `<li>${esc(r.trip)}: ${esc(r.reasons.join("; "))}</li>`).join("") + "</ul>";
 }
 
-function drawTrip() {
+// ── Map drawing ──────────────────────────────────────────────────────────────
+const destIcon = () => L.divIcon({ className: "", html: '<div class="m-dest"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+const origIcon = () => L.divIcon({ className: "", html: '<div class="m-orig"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+
+function routeLine(path, m) {
+  const walk = m === "walk";
+  L.polyline(path, { color: dark() ? "#16191c" : "#ffffff", weight: walk ? 8 : 10, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(layer);
+  L.polyline(path, { color: COLORS[m] === "#111827" && dark() ? "#f4f5f6" : COLORS[m], weight: walk ? 5 : 6, lineCap: "round",
+    lineJoin: "round", dashArray: walk ? "1 9" : null }).addTo(layer);
+}
+
+let lastBounds = null;
+function frame(bounds) {
+  // Keep the route clear of the floating panel (desktop) or the bottom sheet (phones).
+  lastBounds = bounds || lastBounds;
+  if (!lastBounds) return;
   map.invalidateSize();
-  if (layer) map.removeLayer(layer);
-  layer = L.featureGroup().addTo(map);
+  const sheetPx = $("panel").getBoundingClientRect().height;
+  const pad = isPhone() ? { paddingTopLeft: [56, 48], paddingBottomRight: [56, sheetPx + 20] }
+                        : { paddingTopLeft: [460, 40], paddingBottomRight: [70, 40] };
+  map.fitBounds(lastBounds, { ...pad, maxZoom: 17 });
+}
+
+function drawTrip() {
+  clearMap();
   const o = options[active];
   if (!o) return;
-  for (const l of o.legs) {
-    const walk = l.mode === "walk";
-    L.polyline(l.path, { color: COLORS[l.mode], weight: walk ? 5 : 6, lineCap: "round",
-      dashArray: walk ? "1 9" : null, opacity: 0.95 })
-      .bindTooltip(`${MODE_NAMES[l.mode]}: ${l.frm_name} to ${l.to_name}`).addTo(layer);
-  }
-  // Transfer points: where one mode hands off to the next (e.g. walk → ride pickup).
-  o.legs.slice(1).forEach((l, i) => {
-    const prev = o.legs[i];
-    L.circleMarker(l.path[0], { radius: 6, color: COLORS[l.mode], weight: 3, fillColor: "#fff", fillOpacity: 1 })
-      .bindTooltip(`${MODE_NAMES[prev.mode]} to ${MODE_NAMES[l.mode]} at ${l.frm_name}`, { permanent: true, direction: "top", offset: [0, -6] })
-      .addTo(layer);
+  layer = L.featureGroup().addTo(map);
+  for (const l of o.legs) routeLine(l.path, l.mode);
+  let t = 0;
+  o.legs.forEach((l, i) => {
+    if (i > 0) {
+      L.circleMarker(l.path[0], { radius: 6, color: COLORS[l.mode], weight: 3, fillColor: "#fff", fillOpacity: 1 })
+        .bindTooltip(`${MODE_NAMES[l.mode]} in ${Math.round(t)} min`, { permanent: true, direction: "top", offset: [0, -8], className: "eta" })
+        .addTo(layer);
+    }
+    t += l.minutes + l.wait_min;
   });
-  const start = o.legs[0].path[0], end = o.legs.at(-1).path.at(-1);
-  L.circleMarker(start, { radius: 8, color: "#fff", weight: 2, fillColor: "#18324a", fillOpacity: 1 }).bindTooltip(plan.origin_name).addTo(layer);
-  L.circleMarker(end, { radius: 8, color: "#e5482a", weight: 4, fillColor: "#fff", fillOpacity: 1 }).bindTooltip(plan.destination_name).addTo(layer);
-  map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+  L.marker(o.legs[0].path[0], { icon: origIcon() }).bindTooltip(plan.origin_name).addTo(layer);
+  L.marker(o.legs.at(-1).path.at(-1), { icon: destIcon() })
+    .bindTooltip(`Arrive ${arrival(o.total_min, plan.request.hour)}`, { permanent: true, direction: "top", offset: [0, -10], className: "eta" }).addTo(layer);
+  frame(layer.getBounds());
 }
 
-function book(i) {
-  const o = options[i];
-  const rides = o.legs.filter(l => l.mode === "ride");
-  $("modal-body").innerHTML = `<h3>Trip booked</h3>
-    <p>${rides.length ? `Your driver will meet you at <b>${esc(rides[0].frm_name)}</b> in about ${rides[0].wait_min} min.` : "No ride needed. This trip is walking, transit, or bike only."}</p>
-    <p class="fine">${Math.round(o.total_min)} min, $${o.cost.toFixed(2)}, ${o.kcal} kcal, ${o.steps.toLocaleString()} steps.</p>
-    <p class="fine">This is a demo. No ride was requested and no payment was taken.</p>
-    <button class="go" id="modal-done">Done</button>`;
-  $("modal").classList.add("open");
-  $("modal-done").focus();
-  $("modal-done").onclick = () => $("modal").classList.remove("open");
+function selectOption(i) {
+  active = i; renderOptions(false); drawTrip(); updateCta();
+  document.querySelector(`.opt-head[data-i="${i}"]`)?.focus({ preventScroll: true });
 }
 
-window.addEventListener("resize", () => map.invalidateSize());
-$("go").onclick = planTrip;
+// ── Bar Crawl ────────────────────────────────────────────────────────────────
+async function planCrawl() {
+  $("error").textContent = "";
+  if (!$("c-age").checked) { $("error").textContent = "Bar Crawl is for 21 and older. Turn on “I'm 21+” to continue."; return; }
+  const body = { start: $("c-start").value, end: $("c-end").value, hour: +$("c-hour").value,
+    stops: +$("c-stops").value, minutes_per_stop: +$("c-mins").value, vibe,
+    weather: $("weather").value, event: $("event").checked, weight_kg: +$("kg").value, age_confirmed: true };
+  showLoading(`Bars near ${NAMES[body.start]}`, "Picking a walkable route", "Scouting OpenStreetMap for bars that fit your vibe…");
+  try {
+    const res = await fetch("api/crawl", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Couldn't plan that crawl.");
+    renderCrawl(data);
+  } catch (e) {
+    showView("plan"); $("error").textContent = e.message;
+  }
+}
+
+function renderCrawl(d) {
+  crawlData = d;
+  const it = d.itinerary, tot = it.totals;
+  $("r-title").textContent = `${it.stops.length} bars from ${d.start_name}`;
+  $("r-sub").textContent = `${mins(tot.minutes)}, done by ${tot.ends}. ${tot.walk_mi} mi of walking.`;
+  const w = d.weather;
+  $("conditions").innerHTML = [
+    [w ? `${w.temp_f}°F, ${w.summary.toLowerCase()}` : "Clear", !!w], [d.source, true], [`${d.bars_considered} bars considered`, true],
+  ].map(([t, on]) => `<span class="cond ${on ? "on" : ""}"><span class="dot"></span>${esc(t)}</span>`).join("");
+  const rows = [];
+  it.stops.forEach((s, i) => {
+    const hop = it.walks[i];
+    rows.push(`<div class="stop"><span class="n walk" aria-hidden="true"></span><div class="t" style="padding-top:4px">Walk ${hop.distance_mi} mi, about ${Math.round(hop.minutes)} min</div></div>`);
+    const site = /^https?:\/\//i.test(s.website) ? ` <a href="${esc(s.website)}" target="_blank" rel="noopener noreferrer">Website</a>` : "";
+    rows.push(`<div class="stop"><span class="n">${i + 1}</span><div><h3>${esc(s.name)}</h3>
+      <div class="t">${esc(s.arrive)} to ${esc(s.leave)}</div><div class="t">${esc(s.why)}</div>
+      <div class="t">Hours: ${esc(s.hours)}.${site}</div></div></div>`);
+  });
+  if (it.ride_home) {
+    const r = it.ride_home;
+    rows.push(`<div class="stop last"><span class="n ride" aria-hidden="true"></span><div><h3>Ride home to ${esc(r.to_name)}</h3>
+      <div class="t">${r.distance_mi} mi, ${Math.round(r.minutes)} min plus ${r.wait_min} min pickup. $${r.cost.toFixed(2)}, simulated.</div></div></div>`);
+  } else rows[rows.length - 1] = rows[rows.length - 1].replace('class="stop"', 'class="stop last"');
+  let html = `<div class="crawl">${rows.join("")}</div>`;
+  if (it.notes.length) html += `<div class="flags">${it.notes.map(n => `<span>${esc(n)}</span>`).join("")}</div>`;
+  if (d.alternate.length) html += `<p class="why">Another option: ${d.alternate.map(a => esc(a.name)).join(", then ")}.</p>`;
+  $("results").innerHTML = html;
+  clearMap(); layer = L.featureGroup().addTo(map);
+  for (const h of it.walks) routeLine(h.path, "walk");
+  if (it.ride_home) routeLine(it.ride_home.path, "ride");
+  it.stops.forEach((s, i) => L.marker([s.lat, s.lon], { icon: L.divIcon({ className: "",
+    html: `<div class="pin">${i + 1}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] }) }).bindTooltip(`${s.name}, ${s.arrive}`).addTo(layer));
+  L.marker(it.walks[0].path[0], { icon: origIcon() }).bindTooltip(d.start_name).addTo(layer);
+  frame(L.latLngBounds([it.walks[0].path[0], ...it.stops.map(s => [s.lat, s.lon])]));
+  updateCta();
+}
+
+// ── Booking (demo) ───────────────────────────────────────────────────────────
+function book() {
+  let body;
+  if (crawlData) {
+    const r = crawlData.itinerary.ride_home;
+    body = r ? `<h3 id="modal-title">Ride home booked</h3><p>Pickup at <b>${esc(r.frm_name)}</b> around ${esc(crawlData.itinerary.totals.ends)}. $${r.cost.toFixed(2)}.</p>`
+             : `<h3 id="modal-title">Have a great night</h3><p>Your crawl starts at ${esc(crawlData.itinerary.stops[0].arrive)}.</p>`;
+  } else {
+    const o = options[active];
+    const ride = o.legs.find(l => l.mode === "ride");
+    body = `<h3 id="modal-title">${ride ? "Ride booked" : "Trip saved"}</h3>
+      <p>${ride ? `Your driver will meet you at <b>${esc(ride.frm_name)}</b> in about ${ride.wait_min} min.` : "No ride needed. Follow the steps on your trip."}</p>
+      <p class="fine">Arrive ${arrival(o.total_min, plan.request.hour)}, $${o.cost.toFixed(2)}, ${o.kcal} kcal, ${o.steps.toLocaleString()} steps.</p>`;
+  }
+  $("modal-body").innerHTML = body + `<p class="fine">This is a demo. No ride was requested and no payment was taken.</p>
+    <button class="cta" id="modal-done" style="margin-top:14px">Done</button>`;
+  $("modal").classList.add("open"); $("modal-done").focus();
+  $("modal-done").onclick = closeModal;
+}
+function closeModal() { $("modal").classList.remove("open"); $("cta").focus(); }
+
+// ── Events ───────────────────────────────────────────────────────────────────
+$("cta").onclick = () => view === "plan" ? (mode === "barcrawl" ? planCrawl() : planTrip()) : book();
 $("q").addEventListener("keydown", e => { if (e.key === "Enter") planTrip(); });
+$("back").onclick = () => { showView("plan"); crawlData = null; };
+$("swap").onclick = () => { const f = $("from").value; $("from").value = $("to").value; $("to").value = f; };
+$("places").addEventListener("click", e => {
+  const b = e.target.closest("[data-place]");
+  if (!b) return;
+  $("to").value = b.dataset.place;
+  if ($("from").value === b.dataset.place) $("from").value = b.dataset.place === "union_square" ? "ferry_building" : "union_square";
+  $("q").value = ""; planTrip();
+});
+for (const id of ["hour", "weather", "c-hour", "c-stops", "c-mins"]) $(id).addEventListener("change", syncPills);
 for (const k of ["time", "cost", "health"]) {
   $("w-" + k).addEventListener("input", () => {
     $("v-" + k).textContent = $("w-" + k).value;
-    // Hand-tuned weights = Custom mode: no Mode button stays highlighted.
     if (mode !== "barcrawl") {
       mode = "custom";
       document.querySelectorAll(".mode").forEach(b => { b.classList.remove("active"); b.setAttribute("aria-checked", false); });
@@ -648,29 +825,23 @@ for (const k of ["time", "cost", "health"]) {
     clearTimeout(rerankTimer); rerankTimer = setTimeout(rerankNow, 150);
   });
 }
-document.querySelectorAll(".mode").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+document.addEventListener("click", e => {
+  const m = e.target.closest(".mode");
+  if (m) setMode(m.dataset.mode);
+});
 $("vibes").addEventListener("click", e => {
   const b = e.target.closest("[data-vibe]");
   if (!b) return;
   vibe = b.dataset.vibe;
   document.querySelectorAll("#vibes button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
 });
-$("c-go").onclick = planCrawl;
 $("results").addEventListener("click", e => {
-  const bk = e.target.closest("[data-book]");
-  if (bk) { book(+bk.dataset.book); return; }
-  const card = e.target.closest(".opt");
-  if (card) { active = +card.dataset.i; renderResults(false); drawTrip(); }
+  const h = e.target.closest(".opt-head");
+  if (h) selectOption(+h.dataset.i);
 });
-$("results").addEventListener("keydown", e => {
-  const card = e.target.closest(".opt");
-  if (card && (e.key === "Enter" || e.key === " ") && !e.target.closest("button")) {
-    e.preventDefault(); active = +card.dataset.i; renderResults(false); drawTrip();
-    document.querySelector(`.opt[data-i="${active}"]`)?.focus();
-  }
-});
-$("modal").addEventListener("click", e => { if (e.target.id === "modal") $("modal").classList.remove("open"); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") $("modal").classList.remove("open"); });
+$("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("modal").classList.contains("open")) closeModal(); });
+addEventListener("resize", () => (layer ? frame() : map.invalidateSize()));
 init();
 </script>
 </body>

@@ -10,7 +10,10 @@ Rules: 21+ gate (enforced by the API), walking only between bars, the trip home 
 ride (simulated fare), no bikes or driving after the first stop.
 """
 import json
+import os
 import re
+import threading
+import time
 from pathlib import Path
 
 from . import osrm, tools
@@ -54,15 +57,34 @@ def _compact(elements):
     return bars
 
 
-def load_bars():
-    """(bars, source label). Live Overpass first, bundled snapshot on any failure."""
+_refresh_lock = threading.Lock()
+_refresh_after = 0.0          # earliest time to try Overpass again after a failure
+
+
+def _refresh_in_background():
+    """Fetch fresh bars from Overpass without blocking a rider; back off 15 min on failure."""
+    global _refresh_after
+    if not _refresh_lock.acquire(blocking=False):
+        return
     try:
-        data, meta = get_json(OVERPASS, {"data": QUERY}, ttl=604800, disk_ttl=604800, timeout=60)
+        get_json(OVERPASS, {"data": QUERY}, ttl=604800, disk_ttl=604800, timeout=60)
+    except FeedError:
+        _refresh_after = time.time() + 900
+    finally:
+        _refresh_lock.release()
+
+
+def load_bars():
+    """(bars, source label). Cached live data if we have it; otherwise the bundled snapshot
+    right away, with an Overpass refresh started in the background (it's often busy)."""
+    try:
+        data, meta = get_json(OVERPASS, {"data": QUERY}, ttl=604800, disk_ttl=604800, cache_only=True)
         bars = _compact(data.get("elements", []))
         if bars:
             return bars, f"OpenStreetMap live ({meta['cache']})"
     except FeedError:
-        pass
+        if time.time() >= _refresh_after and not os.environ.get("HOPPER_OFFLINE"):
+            threading.Thread(target=_refresh_in_background, daemon=True).start()
     snap = json.loads(SNAPSHOT.read_text())
     return snap["bars"], f"OpenStreetMap snapshot {snap.get('snapshot', '')[:10]}"
 

@@ -54,10 +54,12 @@ def offline():
     return os.environ.get("HOPPER_OFFLINE") == "1"
 
 
-def get_json(url, params=None, ttl=60, disk_ttl=None, budget=None, timeout=12, redact=()):
+def get_json(url, params=None, ttl=60, disk_ttl=None, budget=None, timeout=12, redact=(),
+             cache_only=False):
     """GET a JSON document with caching. Returns (data, meta) where meta says cache/live.
 
     `redact` lists query params (e.g. api_key) kept out of cache keys and error messages.
+    `cache_only=True` never touches the network: it raises FeedError on a cache miss.
     """
     if offline():
         raise FeedError("offline mode")
@@ -76,6 +78,8 @@ def get_json(url, params=None, ttl=60, disk_ttl=None, budget=None, timeout=12, r
         with _lock:
             _mem[key] = (now, data)
         return data, {"cache": "disk"}
+    if cache_only:
+        raise FeedError("not cached yet")
     if budget is not None and not budget.take():
         raise FeedError("hourly call budget spent")
     # 511 only serves gzip and answers 406 to urllib's default "Accept-Encoding: identity".
