@@ -265,6 +265,42 @@
   .pin { width: 28px; height: 28px; border-radius: 50%; background: #000; color: #fff; display: grid; place-items: center;
          font: 700 14px/1 var(--display); border: 2px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .4); }
 
+  /* Ride chooser */
+  .rides { list-style: none; margin: 12px 0 0; padding: 0; }
+  .rides li { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 10px;
+              border: 2px solid transparent; border-radius: 12px; cursor: pointer; }
+  .rides li[aria-selected=true] { border-color: var(--ink); }
+  .rides li[aria-disabled=true] { opacity: .45; cursor: not-allowed; }
+  .rides .car { width: 44px; height: 44px; border-radius: 12px; background: var(--surface); display: grid; place-items: center; }
+  .rides b { font-weight: 700; }
+  .rides .s { font-size: 14px; color: var(--ink-2); }
+  .rides .p { text-align: right; font: 700 18px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+  .rides .p small { display: block; font: 400 12px var(--body); color: var(--ink-2); }
+  .compare { display: flex; gap: 8px; margin-top: 10px; }
+  .compare a { flex: 1; text-align: center; height: 42px; line-height: 42px; border-radius: 10px; background: var(--surface);
+               color: var(--ink); font-weight: 600; text-decoration: none; }
+
+  /* Flights */
+  .fl { border: 2px solid transparent; border-radius: 12px; padding: 12px 10px; margin: 6px -10px 0; cursor: pointer; }
+  .fl.active { border-color: var(--ink); }
+  .fl-head { display: flex; align-items: baseline; gap: 10px; }
+  .fl-head .codes { font: 800 24px/1 var(--display); letter-spacing: .01em; }
+  .fl-head .price { margin-left: auto; font: 700 18px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .fl .sub { font-size: 14px; color: var(--ink-2); }
+  .steps { list-style: none; margin: 10px 0 0; padding: 0; }
+  .steps li { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; font-size: 14px; }
+  .steps .ic2 { width: 30px; height: 30px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; }
+  .steps .ic2 svg { width: 16px; height: 16px; }
+  .steps .r { color: var(--ink-2); text-align: right; white-space: nowrap; }
+  .fare-links { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .fare-links a { height: 34px; line-height: 34px; padding: 0 12px; border-radius: 17px; background: var(--surface); color: var(--ink);
+                  font-size: 14px; font-weight: 600; text-decoration: none; }
+  .date-pill { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 18px; background: var(--surface);
+               font-size: 14px; font-weight: 500; margin-top: 12px; }
+  .date-pill input { border: 0; background: transparent; font: inherit; color: inherit; }
+  .plane { width: 30px; height: 30px; border-radius: 50%; background: #000; color: #fff; display: grid; place-items: center;
+           font: 700 11px/1 var(--display); border: 2px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .4); }
+
   /* Modal (booking, account, save place) */
   .modal { position: fixed; inset: 0; z-index: 50; background: rgb(0 0 0 / .45); display: none; align-items: flex-end; justify-content: center; }
   .modal.open { display: flex; }
@@ -471,6 +507,8 @@ const ICONS = {
   metro: '<circle cx="12" cy="12" r="9"/><path d="M8 16V8l4 5 4-5v8"/>',
   rail: '<rect x="6" y="3" width="12" height="14" rx="3"/><path d="M6 11h12M8 21l2-4M16 21l-2-4M9.5 14h.01M14.5 14h.01"/>',
   ferry: '<path d="M3 18c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0M5 15l1.5-5h11L19 15M9 10V6h6v4"/>',
+  plane: '<path d="M10.5 21l1.5-1v-5l7 2v-2l-7-4.5V5a1.5 1.5 0 0 0-3 0v5.5L2 15v2l7-2v5l1.5 1z" transform="translate(1.5 0)"/>',
+  seat: '<circle cx="12" cy="7" r="3"/><path d="M6 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/>',
   pin: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   home: '<path d="M4 11 12 4l8 7M6 9.5V20h12V9.5M10 20v-5h4v5"/>',
@@ -489,7 +527,7 @@ const POPULAR = [
   ["chase_center", "Warriors and concerts"], ["coit_tower", "Telegraph Hill views"],
 ];
 let COLORS = {}, PLACES = [], BYKEY = {}, plan = null, options = [], active = 0, layer = null, rerankTimer = null;
-let mode = "hustle", vibe = "any", view = "plan", crawlData = null;
+let mode = "hustle", vibe = "any", view = "plan", crawlData = null, flightData = null, activeFlight = 0, rideChoice = null;
 let me = { user: null, places: [], trips: [] };
 const MODE_WEIGHTS = { hustle: [3, 0.5, 0], broke: [0.5, 3, 0.5], burn: [0.5, 0.5, 3] };
 const isPhone = () => matchMedia("(max-width: 899px)").matches;
@@ -895,6 +933,11 @@ function updateCta() {
   const cta = $("cta");
   cta.disabled = false;
   if (view === "plan") { cta.textContent = mode === "barcrawl" ? "Plan my crawl" : "See trips"; return; }
+  if (flightData) {
+    const f = flightData.options[activeFlight];
+    cta.textContent = f ? `Check fares for ${f.dep.iata} to ${f.arr.iata}` : "Finding flights…"; cta.disabled = !f;
+    return;
+  }
   if (crawlData) {
     const r = crawlData.itinerary.ride_home;
     cta.textContent = r ? `Book ride home for $${r.cost.toFixed(2)}` : "Start the crawl";
@@ -903,7 +946,7 @@ function updateCta() {
   const o = options[active];
   if (!o) { cta.textContent = mode === "barcrawl" ? "Finding bars…" : "Finding trips…"; cta.disabled = true; return; }
   const ride = o.legs.some(l => l.mode === "ride");
-  cta.textContent = o.cost === 0 ? "Start walking" : ride ? `Book for $${o.cost.toFixed(2)}` : `Go for $${o.cost.toFixed(2)}`;
+  cta.textContent = o.cost === 0 ? "Start walking" : ride ? "Choose a ride" : `Go for $${o.cost.toFixed(2)}`;
 }
 
 function setMode(m, { rerank = true } = {}) {
@@ -935,7 +978,7 @@ function clearMap() { if (layer) { map.removeLayer(layer); layer = null; } lastB
 function notice(id, text) { $(id).hidden = !text; $(id).textContent = text || ""; }
 
 function showLoading(title, sub, msg) {
-  crawlData = null; plan = null; options = [];
+  crawlData = null; plan = null; options = []; flightData = null;
   showView("results");
   $("r-title").textContent = title; $("r-sub").textContent = sub;
   $("conditions").innerHTML = ""; notice("r-notice", "");
@@ -961,6 +1004,7 @@ async function planTrip() {
               "Comparing walking, rides, Muni, BART, and bikes", "Checking live arrivals, weather, and street routes…");
   try {
     const data = await api("api/plan", { method: "POST", body: JSON.stringify(body) });
+    if (data.redirect === "flights") { setPlace("from", data.origin); setPlace("to", data.destination); return planFlights(data); }
     if (data.redirect === "barcrawl") {
       showView("plan"); setMode("barcrawl");
       if (data.start && BYKEY[data.start]) setPlace("cstart", landmarkPlace(data.start));
@@ -1174,6 +1218,111 @@ function renderCrawl(d) {
   updateCta();
 }
 
+// ── Ride chooser ─────────────────────────────────────────────────────────────
+async function openRideChooser() {
+  const o = options[active];
+  const leg = o.legs.find(l => l.mode === "ride");
+  if (!leg) return book();
+  openModal(`${closeBtn}<h3 id="modal-title">Choose a ride</h3><p class="fine" style="margin-top:0">Loading ride types…</p>`);
+  let data;
+  try {
+    data = await api("api/ride-options", { method: "POST", body: JSON.stringify({ leg: { path: [leg.path[0], leg.path.at(-1)],
+      distance_mi: leg.distance_mi, minutes: leg.minutes, surge: leg.surge, frm_name: leg.frm_name, to_name: leg.to_name },
+      hour: plan.request.hour, now_min: plan.request.leave_now ? minutesNowIn(plan.request.tz) : plan.request.hour * 60 }) });
+  } catch (e) { $("modal-body").innerHTML = `${closeBtn}<h3 id="modal-title">Choose a ride</h3><p class="error">${esc(e.message)}</p>`; return; }
+  let pick = data.options.find(x => x.available) || data.options[0];
+  const render = () => {
+    $("modal-body").innerHTML = `${closeBtn}<h3 id="modal-title">Choose a ride</h3>
+      <p class="fine" style="margin-top:0">${esc(data.pickup.name)} to ${esc(data.dropoff.name)}, ${dist(leg.distance_mi)}${leg.surge > 1 ? `. Prices are higher right now (${leg.surge}×).` : ""}</p>
+      <ul class="rides" role="listbox" aria-label="Ride types">${data.options.map(x => `
+        <li role="option" data-ride="${x.id}" aria-selected="${x.id === pick.id}" aria-disabled="${!x.available}" tabindex="${x.available ? 0 : -1}">
+          <span class="car">${icon(x.id === "taxi" ? "ride" : "ride")}</span>
+          <span><b>${esc(x.name)}</b> <span class="s">${icon("seat").replace('class="i"', 'class="i" style="width:14px;height:14px;vertical-align:-2px"')} ${x.seats}</span><br>
+            <span class="s">${x.available ? `${x.eta_min} min away${x.dropoff_min != null ? `, drop-off ${clockFromMinutes(x.dropoff_min)}` : ""}` : esc(x.reason)}</span><br>
+            <span class="s">${esc(x.blurb)}</span></span>
+          <span class="p">$${x.price_low.toFixed(0)}–${x.price_high.toFixed(0)}<small>${x.metered ? "est. meter" : "estimate"}</small></span>
+        </li>`).join("")}</ul>
+      <button class="cta" type="button" id="ride-confirm" style="margin-top:14px">Confirm ${esc(pick.name)}, about $${pick.price.toFixed(2)}</button>
+      <div class="compare"><a href="${esc(data.links.uber)}" target="_blank" rel="noopener noreferrer">Compare in Uber</a>
+        <a href="${esc(data.links.lyft)}" target="_blank" rel="noopener noreferrer">Compare in Lyft</a></div>
+      <p class="fine">${esc(data.note)}</p>`;
+    $("ride-confirm").onclick = () => { rideChoice = { ...pick, legCost: leg.cost }; book(); };
+    $("modal-body").querySelector(".rides").addEventListener("click", e => {
+      const li = e.target.closest("li[data-ride]"); if (!li || li.getAttribute("aria-disabled") === "true") return;
+      pick = data.options.find(x => x.id === li.dataset.ride); render();
+      $("modal-body").querySelector(`li[data-ride="${pick.id}"]`).focus();
+    });
+    $("modal-body").querySelector(".rides").addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.target.click(); }
+    });
+  };
+  render();
+}
+
+// ── Flights (door to door) ───────────────────────────────────────────────────
+function tomorrowIn(tz) {
+  const d = new Date(new Date().toLocaleString("en-US", { timeZone: tz || "America/Los_Angeles" }));
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const hm = (m) => `${Math.floor(m / 60)} hr${m % 60 ? ` ${m % 60} min` : ""}`;
+async function planFlights(info, date) {
+  const body = { ...placeParams("origin", sel.from), ...placeParams("destination", sel.to), date: date || tomorrowIn(),
+                 hour: 9, mode: MODE_WEIGHTS[mode] ? mode : "hustle", weight_kg: +$("kg").value };
+  showLoading(`${sel.from.name} to ${sel.to.name}`, `${info?.miles ? info.miles.toLocaleString() + " mi apart, so let's fly." : "Finding flights."}`,
+              "Finding airports and planning your trips to and from them…");
+  $("cta").textContent = "Finding flights…";
+  try {
+    flightData = await api("api/flights", { method: "POST", body: JSON.stringify(body) });
+    activeFlight = 0; renderFlights(true);
+  } catch (e) { showView("plan"); $("error").textContent = e.message; }
+}
+function renderFlights() {
+  const d = flightData;
+  $("r-title").textContent = `${d.origin_name} to ${d.destination_name}`;
+  $("r-sub").textContent = `${d.miles.toLocaleString()} mi apart, so here's how to fly, door to door.`;
+  $("conditions").innerHTML = `<label class="date-pill">${icon("clock")}<input type="date" id="fl-date" value="${esc(d.date)}" aria-label="Travel date"></label>`;
+  notice("r-notice", d.note);
+  $("trace-box").hidden = true; $("rej-box").hidden = true;
+  const step = (ico, text, right) => `<li><span class="ic2">${icon(ico)}</span><span>${text}</span><span class="r">${right}</span></li>`;
+  $("results").innerHTML = d.options.map((o, i) => {
+    const g1 = o.ground_to, g2 = o.ground_from, f = o.flight;
+    return `<div class="fl ${i === activeFlight ? "active" : ""}" data-fl="${i}" tabindex="0" role="button" aria-pressed="${i === activeFlight}">
+      <div class="fl-head"><span class="codes">${esc(o.dep.iata)} to ${esc(o.arr.iata)}</span><span class="price">$${o.total_low}–${o.total_high}</span></div>
+      <div class="sub">${esc(o.dep.name)} to ${esc(o.arr.name)}</div>
+      <div class="sub"><b style="color:var(--ink)">${hm(o.total_min)}</b> door to door${f.international ? ", international" : ""}</div>
+      <ul class="steps">
+        ${step(g1.ok ? (g1.legs?.find(l => l.mode !== "walk")?.mode || "walk") : "ride", `To ${esc(o.dep.iata)}: ${esc(g1.ok ? g1.summary : "plan your own way")}`, g1.ok ? `${g1.minutes} min, $${g1.cost.toFixed(2)}` : "about 1 hr")}
+        ${step("clock", `Check-in and security`, `${f.buffer_before} min`)}
+        ${step("plane", `Flight, ${f.km.toLocaleString()} km`, `about ${hm(f.minutes)}, $${f.fare_low}–${f.fare_high}`)}
+        ${step("clock", f.international ? "Deplane, passport control" : "Deplane", `${f.buffer_after} min`)}
+        ${step(g2.ok ? (g2.legs?.find(l => l.mode !== "walk")?.mode || "walk") : "ride", `From ${esc(o.arr.iata)}: ${esc(g2.ok ? g2.summary : "plan your own way")}`, g2.ok ? `${g2.minutes} min, $${g2.cost.toFixed(2)}` : "about 1 hr")}
+      </ul>
+      <div class="fare-links"><a href="${esc(o.links.google_flights)}" target="_blank" rel="noopener noreferrer">Google Flights</a>
+        <a href="${esc(o.links.skyscanner)}" target="_blank" rel="noopener noreferrer">Skyscanner</a>
+        <a href="${esc(o.links.kayak)}" target="_blank" rel="noopener noreferrer">Kayak</a></div>
+    </div>`;
+  }).join("");
+  $("fl-date").onchange = (e) => planFlights({ miles: d.miles }, e.target.value);
+  drawFlight(); updateCta();
+}
+function drawFlight() {
+  clearMap();
+  const o = flightData?.options[activeFlight]; if (!o) return;
+  layer = L.featureGroup().addTo(map);
+  for (const g of [o.ground_to, o.ground_from]) if (g.ok) for (const l of g.legs) routeLine(l.path, l.mode, l.color);
+  // Split the arc where it crosses the antimeridian so Leaflet doesn't draw across the world.
+  const segs = [[]];
+  o.arc.forEach((p, i) => { if (i && Math.abs(p[1] - o.arc[i - 1][1]) > 180) segs.push([]); segs.at(-1).push(p); });
+  for (const sgm of segs) L.polyline(sgm, { color: dark() ? "#f4f5f6" : "#000", weight: 3, dashArray: "6 8", opacity: .8 }).addTo(layer);
+  const planeIcon = (code) => L.divIcon({ className: "", html: `<div class="plane">${esc(code)}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+  L.marker([o.dep.lat, o.dep.lon], { icon: planeIcon(o.dep.iata) }).bindTooltip(o.dep.name).addTo(layer);
+  L.marker([o.arr.lat, o.arr.lon], { icon: planeIcon(o.arr.iata) }).bindTooltip(o.arr.name).addTo(layer);
+  L.marker([sel.from.lat, sel.from.lon], { icon: origIcon() }).bindTooltip(sel.from.name).addTo(layer);
+  L.marker([sel.to.lat, sel.to.lon], { icon: destIcon() }).bindTooltip(sel.to.name).addTo(layer);
+  frame(layer.getBounds());
+}
+
 // ── Booking (demo) — saved to trip history when signed in ────────────────────
 async function book() {
   let body, record = null;
@@ -1190,11 +1339,14 @@ async function book() {
     const o = options[active];
     const ride = o.legs.find(l => l.mode === "ride");
     const { title } = splitLabel(o.label);
+    const choice = ride ? rideChoice : null;
+    const cost = choice ? Math.round((o.cost - choice.legCost + choice.price) * 100) / 100 : o.cost;
     record = { origin: plan.places.origin, destination: plan.places.destination, mode,
-               summary: { label: title, minutes: o.total_min, cost: o.cost, kcal: o.kcal, modes: o.legs.map(l => l.mode) } };
-    body = `<h3 id="modal-title">${ride ? "Ride booked" : "Trip saved"}</h3>
-      <p>${ride ? `Your driver will meet you at <b>${esc(ride.frm_name)}</b> in about ${ride.wait_min} min.` : "No ride needed. Follow the steps on your trip."}</p>
-      <p class="fine">Arrive ${arrival(o.total_min)}, $${o.cost.toFixed(2)}, ${o.kcal} kcal, ${o.steps.toLocaleString()} steps.</p>`;
+               summary: { label: choice ? `${title}, ${choice.name}` : title, minutes: o.total_min, cost, kcal: o.kcal, modes: o.legs.map(l => l.mode) } };
+    body = `<h3 id="modal-title">${ride ? `${choice ? esc(choice.name) : "Ride"} booked` : "Trip saved"}</h3>
+      <p>${ride ? `Your driver will meet you at <b>${esc(ride.frm_name)}</b> in about ${choice ? choice.eta_min : ride.wait_min} min.` : "No ride needed. Follow the steps on your trip."}</p>
+      <p class="fine">Arrive around ${arrival(o.total_min)}, about $${cost.toFixed(2)}, ${o.kcal} kcal, ${o.steps.toLocaleString()} steps.</p>`;
+    rideChoice = null;
   }
   let saved = "";
   if (me.user) {
@@ -1208,9 +1360,14 @@ async function book() {
 }
 
 // ── Events ───────────────────────────────────────────────────────────────────
-$("cta").onclick = () => view === "plan" ? (mode === "barcrawl" ? planCrawl() : planTrip()) : book();
+$("cta").onclick = () => {
+  if (view === "plan") return mode === "barcrawl" ? planCrawl() : planTrip();
+  if (flightData) { const f = flightData.options[activeFlight]; if (f) window.open(f.links.google_flights, "_blank", "noopener"); return; }
+  if (!crawlData && options[active]?.legs.some(l => l.mode === "ride")) return openRideChooser();
+  book();
+};
 $("q").addEventListener("keydown", e => { if (e.key === "Enter") planTrip(); });
-$("back").onclick = () => { showView("plan"); crawlData = null; };
+$("back").onclick = () => { showView("plan"); crawlData = null; flightData = null; clearMap(); };
 $("swap").onclick = () => { const f = sel.from; setPlace("from", sel.to); setPlace("to", f); };
 $("cities").addEventListener("click", e => {
   const b = e.target.closest("[data-city]"); if (!b) return;
@@ -1256,7 +1413,13 @@ $("vibes").addEventListener("click", e => {
 });
 $("results").addEventListener("click", e => {
   const h = e.target.closest(".opt-head");
-  if (h) selectOption(+h.dataset.i);
+  if (h) return selectOption(+h.dataset.i);
+  const fl = e.target.closest("[data-fl]");
+  if (fl && !e.target.closest("a")) { activeFlight = +fl.dataset.fl; renderFlights(); }
+});
+$("results").addEventListener("keydown", e => {
+  const fl = e.target.closest("[data-fl]");
+  if (fl && (e.key === "Enter" || e.key === " ") && !e.target.closest("a")) { e.preventDefault(); activeFlight = +fl.dataset.fl; renderFlights(); }
 });
 $("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("modal").classList.contains("open")) closeModal(); });

@@ -1,6 +1,7 @@
 """Hopper Flask server: /api/plan runs the swarm, /api/rerank re-runs only the Ranker,
 /api/crawl plans a Bar Crawl."""
 import os
+from datetime import datetime, timedelta
 import uuid
 from collections import OrderedDict
 from pathlib import Path
@@ -20,7 +21,7 @@ def load_dotenv(path=Path(__file__).resolve().parent.parent / ".env"):
 
 load_dotenv()
 
-from . import accounts, bars, geo, tools, weather, world  # noqa: E402 — needs env loaded first
+from . import accounts, bars, flights, geo, rides, tools, weather, world  # noqa: E402 — needs env loaded first
 from .agents import PlanError, orchestrate, rerank  # noqa: E402
 from .data import MODE_COLORS, PLACES  # noqa: E402
 from .live import FeedError  # noqa: E402
@@ -47,6 +48,60 @@ def geocode():
         return jsonify({"results": geo.search(q, near=near)})
     except FeedError:
         return jsonify({"results": [], "error": "Address search is unavailable right now."}), 503
+
+
+@app.post("/api/ride-options")
+def ride_options():
+    """Ride types (simulated fares / ETAs / availability) for one ride leg + Uber/Lyft links."""
+    body = request.get_json(silent=True) or {}
+    leg = body.get("leg") or {}
+    try:
+        path = [[float(p[0]), float(p[1])] for p in (leg.get("path") or [])[:1] + (leg.get("path") or [])[-1:]]
+        dist, minutes = float(leg["distance_mi"]), float(leg["minutes"])
+        surge = min(max(float(leg.get("surge") or 1.0), 1.0), 3.0)
+        hour = int(body.get("hour", 12)) % 24
+        now_min = body.get("now_min")
+        now_min = None if now_min is None else int(now_min) % 1440
+    except (KeyError, TypeError, ValueError, IndexError):
+        return jsonify({"error": "Send the ride leg with its path, distance, and minutes."}), 400
+    if len(path) != 2 or not (0 < dist <= 150) or not (0 < minutes <= 300):
+        return jsonify({"error": "That ride leg doesn't look valid."}), 400
+    safe = {"path": path, "distance_mi": dist, "minutes": minutes, "surge": surge,
+            "frm_name": str(leg.get("frm_name") or "Pickup")[:80], "to_name": str(leg.get("to_name") or "Drop-off")[:80]}
+    return jsonify({**rides.for_leg(safe, hour, now_min), "note": rides.simulated_note()})
+
+
+@app.post("/api/flights")
+def flight_options():
+    """Door-to-door options with a flight: ground → airport → flight (estimate) → ground."""
+    body = request.get_json(silent=True) or {}
+    try:
+        origin = geo.resolve(body.get("origin_place") or body.get("origin"))
+        dest = geo.resolve(body.get("destination_place") or body.get("destination"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+    if not origin or not dest:
+        return jsonify({"error": "Choose where you're starting and where you're going."}), 422
+    for k in (origin, dest):
+        geo.ensure_ready(k)
+    tz_o = world.timezone_at(*tools.latlon(origin))
+    tz_d = world.timezone_at(*tools.latlon(dest))
+    today = world.local_now(tz_o).date()
+    try:
+        date = datetime.strptime(str(body.get("date") or ""), "%Y-%m-%d").date()
+    except ValueError:
+        date = today + timedelta(days=1)
+    if date < today or date > today + timedelta(days=330):
+        return jsonify({"error": "Pick a travel date between today and about 11 months out."}), 422
+    hour = int(body["hour"]) % 24 if str(body.get("hour", "")).isdigit() else 9
+    mode = body.get("mode") if body.get("mode") in ("hustle", "broke", "burn") else "hustle"
+    out = flights.plan(origin, dest, date, hour, float(body.get("weight_kg") or 75), orchestrate, tz_o, tz_d, mode)
+    if out["error"] and not out["options"]:
+        return jsonify({"error": out["error"]}), 422
+    return jsonify({**out, "date": date.isoformat(), "hour": hour,
+                    "origin_name": tools.name(origin), "destination_name": tools.name(dest),
+                    "miles": round(tools.haversine_mi(origin, dest)),
+                    "note": "Flight times and fares are estimates from distance. Check live fares before you book."})
 
 
 @app.get("/api/reverse")

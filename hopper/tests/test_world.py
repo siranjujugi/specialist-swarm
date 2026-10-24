@@ -90,8 +90,10 @@ def test_outside_sf_the_intent_parser_never_guesses_sf_landmarks():
     assert agents.parse_intent_rules("from union square to coit tower")["destination"] == "coit_tower"
 
 
-def test_trips_across_continents_are_refused():
-    paris = geo.register("Paris", 48.8566, 2.3522, elev=100)
-    with pytest.raises(agents.PlanError, match="miles apart"):
+def test_trips_across_continents_hand_off_to_flights():
+    result, *_ = agents.orchestrate({"origin_place": {"name": "Paris", "lat": 48.8566, "lon": 2.3522},
+                                     "destination": "ferry_building", "weather": "clear"})
+    assert result["redirect"] == "flights" and result["miles"] > 5000
+    with pytest.raises(agents.PlanError, match="miles apart"):      # ground legs never chain flights
         agents.orchestrate({"origin_place": {"name": "Paris", "lat": 48.8566, "lon": 2.3522},
-                            "destination": "ferry_building", "weather": "clear"})
+                            "destination": "ferry_building", "weather": "clear", "_quick": True})

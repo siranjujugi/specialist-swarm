@@ -664,7 +664,8 @@ class PlanError(ValueError):
 
 def orchestrate(body):
     """Full swarm run. Returns the response dict plus the raw trips for re-ranking."""
-    trace, client = Trace(), _llm()
+    trace = Trace()
+    client = None if body.get("_quick") else _llm()     # ground legs for flights skip Claude
     t_start = time.perf_counter()
 
     req = {**DEFAULTS, **{k: v for k, v in body.items() if v not in (None, "") and k in DEFAULTS},
@@ -723,7 +724,15 @@ def orchestrate(body):
         raise PlanError("Origin and destination are the same place.")
     span = tools.haversine_mi(req["origin"], req["destination"])
     if span > 100:
-        raise PlanError(f"Those places are {span:,.0f} miles apart. Hopper plans trips within a city or metro area.")
+        if body.get("_quick"):
+            raise PlanError(f"Those places are {span:,.0f} miles apart.")
+        # Too far for ground travel: hand off to the flight planner (door to door).
+        return {"redirect": "flights", "miles": round(span),
+                "origin": {"key": req["origin"], "name": tools.name(req["origin"]),
+                           "lat": tools.latlon(req["origin"])[0], "lon": tools.latlon(req["origin"])[1]},
+                "destination": {"key": req["destination"], "name": tools.name(req["destination"]),
+                                "lat": tools.latlon(req["destination"])[0], "lon": tools.latlon(req["destination"])[1]},
+                "trace": trace.steps}, None, None, None, None
     req["region"] = world.region(req["origin"], req["destination"])
     # Times are local to where the trip starts (SF, Paris, Tokyo…), not to the server.
     req["tz"] = world.timezone_at(*tools.latlon(req["origin"]))

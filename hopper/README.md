@@ -15,6 +15,32 @@ Open http://localhost:5080. With `ANTHROPIC_API_KEY` set, the Intent and Explain
 use Claude (`claude-haiku-5-5`); without it (or with `HOPPER_OFFLINE=1`) they fall back to
 a rule parser and templates. Every number is identical in both modes.
 
+## Choosing a ride
+
+When the selected trip includes a ride, "Choose a ride" opens a ride chooser: Go, Shared,
+Green, Comfort, XL, Premium, and Taxi, each with seats, pickup time, local drop-off time, and
+a fare range, cheapest first. Shared pauses late at night and in heavy surge; Premium is
+sometimes fully booked; Taxi is metered and never surges. **All of this is simulated**:
+Uber and Lyft don't offer public price APIs, so the chooser also has "Compare in Uber" and
+"Compare in Lyft" buttons that open the real apps (public universal links) with pickup and
+drop-off filled in. Generic tier names on purpose. Confirming saves the chosen type and its
+price to trip history.
+
+## Flights (door to door)
+
+Trips over ~100 miles switch to flights instead of failing:
+
+- Airports: 3,244 scheduled-service airports from **OurAirports** (public domain, bundled in
+  `app/fixtures/airports.json`); the 3 nearest each side, big hubs preferred.
+- Each option = ground trip to the airport (planned by the normal swarm in your Mode: BART
+  to SFO in Broke, a ride in Hustle) + check-in buffer (90 min domestic / 150 international)
+  + flight + arrival buffer (25 / 50) + ground trip from the airport. Hustle/Burn rank by
+  door-to-door time, Broke by price.
+- **Flight times and fares are estimates** from great-circle distance — there's no free
+  schedule/fare source. Every option links to **Google Flights, Skyscanner, and Kayak**
+  prefilled with the airports and date. For real fares and booking, plug in a flight API
+  (e.g. Duffel or Amadeus) behind `app/flights.py`.
+
 ## Worldwide
 
 Hopper plans trips in any city. San Francisco keeps its richer local stack; everywhere else
