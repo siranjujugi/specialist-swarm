@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from . import bikes, five11, modes, osrm, tools, weather
+from . import bikes, five11, geo, modes, osrm, tools, weather
 from .data import BIKE_DOCKS, PLACES, TRANSIT_LINES
 from .live import FeedError
 
@@ -69,8 +69,10 @@ def match_place(text):
     for alias, key in ALIASES.items():
         if alias in t:
             return key
-    names = {v[0].lower(): k for k, v in PLACES.items()}
-    names.update({k.replace("_", " "): k for k in PLACES})
+    if re.search(r"\d", t):          # "500 Folsom St" is an address — geocode it, don't guess a landmark
+        return None
+    names = {PLACES[k][0].lower(): k for k in geo.landmarks()}
+    names.update({k.replace("_", " "): k for k in geo.landmarks()})
     hit = difflib.get_close_matches(t, list(names), n=1, cutoff=0.45)
     if hit:
         return names[hit[0]]
@@ -88,10 +90,12 @@ def parse_intent_rules(query):
         m = re.search(r"^(.+?) to (.+?)(?:\s+(?:by|at|before|under|and)\s|[,.!?]|$)", q)
     if m:
         out["origin"], out["destination"] = match_place(m.group(1)), match_place(m.group(2))
+        out["origin_text"], out["destination_text"] = m.group(1).strip(), m.group(2).strip()
     elif " to " not in q:
         dest = re.search(r"(?:get me to|take me to|going to|go to)\s+(.+?)(?:\s+(?:by|at|under)\s|[,.!?]|$)", q)
         if dest:
             out["destination"] = match_place(dest.group(1))
+            out["destination_text"] = dest.group(1).strip()
     t = re.search(r"(?:by|at|before)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", q)
     if t:
         h = int(t.group(1)) % 12 + (12 if (t.group(3) == "pm" or (not t.group(3) and int(t.group(1)) < 8)) else 0)
@@ -133,6 +137,10 @@ INTENT_TOOL = {
         "properties": {
             "origin": {"type": ["string", "null"], "enum": list(PLACES) + [None]},
             "destination": {"type": ["string", "null"], "enum": list(PLACES) + [None]},
+            "origin_text": {"type": ["string", "null"],
+                            "description": "The rider's own words for the start if it is NOT a catalog landmark (e.g. a street address)"},
+            "destination_text": {"type": ["string", "null"],
+                                 "description": "The rider's own words for the destination if it is NOT a catalog landmark"},
             "hour": {"type": ["integer", "null"], "description": "Departure/arrival hour 0-23"},
             "max_cost": {"type": ["number", "null"], "description": "Budget in USD"},
             "weather": {"type": ["string", "null"], "enum": ["clear", "rain", "fog", None]},
@@ -161,12 +169,14 @@ def intent_agent(query, trace, client):
         trace.log("Intent", "rules", (time.perf_counter() - t0) * 1000,
                   f"offline parser → {json.dumps(rules)}")
         return rules
-    catalog = "\n".join(f"{k}: {v[0]}" for k, v in PLACES.items())
+    catalog = "\n".join(f"{k}: {PLACES[k][0]}" for k in geo.landmarks())
     try:
         resp = client.messages.create(
             model=INTENT_MODEL, max_tokens=400,
-            system="You turn San Francisco trip requests into structured data. Map places "
-                   "to the closest catalog key. Catalog:\n" + catalog,
+            system="You turn San Francisco trip requests into structured data. Use a catalog key "
+                   "only when the rider clearly means that landmark. For a street address or any "
+                   "other place, leave the key null and copy the rider's words into origin_text / "
+                   "destination_text so it can be geocoded. Catalog:\n" + catalog,
             tools=[INTENT_TOOL], tool_choice={"type": "tool", "name": "trip_request"},
             messages=[{"role": "user", "content": query}])
         parsed = next(b.input for b in resp.content if b.type == "tool_use")
@@ -200,15 +210,15 @@ def walk_specialist(req):
 def ride_specialist(req):
     o, d, h, ev, kg = req["origin"], req["destination"], req["hour"], req["event"], req["weight_kg"]
     trips = [tools.Trip([tools.ride_leg(o, d, h, ev)], "Ride-hail")]
-    pickups = _towards(o, d, PLACES, 0.8)[:4]       # walk ahead: shorter ride
+    pickups = _towards(o, d, geo.landmarks(), 0.8)[:4]       # walk ahead: shorter ride
     if tools.surge_at(o, h, ev)[0] > 1:             # walk out of the surge zone, any direction
         reach = req["max_walk_leg_mi"] / tools.WALK_CIRCUITY
-        escapes = [p for p in tools.nearest(o, PLACES, reach)
+        escapes = [p for p in tools.nearest(o, geo.landmarks(), reach)
                    if p not in (o, d) and tools.surge_at(p, h, ev)[0] == 1]
         pickups = list(dict.fromkeys(escapes[:3] + pickups))
     o_surge = tools.surge_at(o, h, ev)[0]
     pickups = [p for p in pickups if tools.surge_at(p, h, ev)[0] <= o_surge]  # never walk into surge
-    dropoffs = _towards(d, o, PLACES, 0.6)[:3]      # hop out early and walk the rest
+    dropoffs = _towards(d, o, geo.landmarks(), 0.6)[:3]      # hop out early and walk the rest
     for p in pickups:
         trips.append(tools.Trip([tools.walk_leg(o, p, kg), tools.ride_leg(p, d, h, ev)], "Ride-hail"))
     for q in dropoffs:
@@ -615,12 +625,31 @@ def orchestrate(body):
 
     req = {**DEFAULTS, **{k: v for k, v in body.items() if v not in (None, "") and k in DEFAULTS},
            "weights": {**DEFAULTS["weights"], **(body.get("weights") or {})}}
-    req["origin"], req["destination"] = body.get("origin"), body.get("destination")
+    try:
+        # Form values may be landmark keys, geo keys, or {name, lat, lon} from address search.
+        req["origin"] = geo.resolve(body.get("origin_place") or body.get("origin"))
+        req["destination"] = geo.resolve(body.get("destination_place") or body.get("destination"))
+    except ValueError as e:
+        raise PlanError(str(e)) from None
     if (body.get("query") or "").strip():
         parsed = intent_agent(body["query"], trace, client)
-        req.update({k: v for k, v in parsed.items() if k != "weights"})
+        req.update({k: v for k, v in parsed.items() if k != "weights" and not k.endswith("_text")})
         if "weights" in parsed:
             req["weights"] = {**req["weights"], **parsed["weights"]}
+        # Words that weren't a landmark ("500 Folsom St") get geocoded inside SF.
+        for k in ("origin", "destination"):
+            text = parsed.get(f"{k}_text")
+            if text and k not in parsed:
+                t0 = time.perf_counter()
+                try:
+                    key = geo.geocode_first(text)
+                except ValueError:
+                    key = None
+                trace.log("Geocoder (Photon)", "tools", (time.perf_counter() - t0) * 1000,
+                          f"'{text}' → {tools.name(key) if key else 'no SF match'}")
+                if not key:
+                    raise PlanError(f"Couldn't find “{text}” in San Francisco. Try a street address or a landmark.")
+                req[k] = key
     if req["mode"] == "barcrawl":
         # Bar Crawl is a different planner with a 21+ gate — hand back to the UI.
         return {"redirect": "barcrawl", "start": req.get("origin"), "end": req.get("destination"),
@@ -628,7 +657,8 @@ def orchestrate(body):
 
     for k in ("origin", "destination"):
         if req.get(k) not in PLACES:
-            raise PlanError(f"Couldn't figure out the {k}. Try a landmark like 'Ferry Building'.")
+            raise PlanError(f"Couldn't figure out the {k}. Search for an address or pick a landmark.")
+        geo.ensure_ready(req[k])
         if not tools.in_sf(req[k]):
             raise PlanError(f"{tools.name(req[k])} is outside San Francisco — SF only for now.")
     if req["origin"] == req["destination"]:
@@ -684,6 +714,8 @@ def orchestrate(body):
                  "bikes": req.get("_bike_source", "not used"),
                  "five11": five11.status(), "live_now": req["live_now"]},
         "origin_name": tools.name(req["origin"]), "destination_name": tools.name(req["destination"]),
+        "places": {k: {"key": req[k], "name": tools.name(req[k]), "lat": tools.latlon(req[k])[0],
+                       "lon": tools.latlon(req[k])[1]} for k in ("origin", "destination")},
         "options": options,
         "baseline": baseline_trip.to_dict(),
         "stats": {"candidates": len(candidates), "feasible": len(feasible),

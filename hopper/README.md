@@ -15,6 +15,29 @@ Open http://localhost:5080. With `ANTHROPIC_API_KEY` set, the Intent and Explain
 use Claude (`claude-haiku-5-5`); without it (or with `HOPPER_OFFLINE=1`) they fall back to
 a rule parser and templates. Every number is identical in both modes.
 
+## Place search
+
+"Pickup" and "Where to?" are search boxes, not dropdowns. Suggestions come from your current
+location, saved places, recent trips, the built-in landmarks, and live address search via
+**Photon** (OpenStreetMap, no key, limited to San Francisco + SFO). Any SF address becomes a
+temporary `geo:<lat>,<lon>` place the whole planner understands; its elevation comes from
+the **USGS Elevation Point Query Service** so hill and calorie math still works. Plain-English
+requests with addresses ("from 500 Folsom St to Coit Tower") are geocoded the same way.
+
+## Accounts, saved places, trip history
+
+- Sign up / sign in from the header. Accounts live in SQLite at `data/hopper.db`
+  (git-ignored). Passwords are salted scrypt hashes; sessions are signed, HttpOnly,
+  SameSite=Lax cookies. The signing key comes from `HOPPER_SECRET_KEY` or is generated once
+  into `data/.secret_key`.
+- Saved places: one Home, one Work, plus up to 25 custom labels; they show as one-tap
+  shortcuts and at the top of search suggestions.
+- Trip history: booking (demo) saves the trip; the account sheet lists trips with
+  "Plan again" and "Clear trip history".
+- Signed out, recent searches are still remembered in this browser (localStorage).
+- Safeguards: JSON-only state changes, generic login errors, 5 failed logins per 15 min
+  per email, per-user data isolation (all covered by tests).
+
 ## Modes
 
 Pick one at the top (or let the Intent agent infer it from your question):

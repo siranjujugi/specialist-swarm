@@ -115,7 +115,7 @@ def haversine_pts(p, q):
 
 
 def in_sf(key):
-    if key in SF_EXCEPTIONS:
+    if key in SF_EXCEPTIONS or key.startswith("geo:"):   # geo places are checked at registration
         return True
     lat, lon = latlon(key)
     return SF_BOUNDS["lat"][0] <= lat <= SF_BOUNDS["lat"][1] and \

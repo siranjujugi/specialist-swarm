@@ -20,7 +20,7 @@ def load_dotenv(path=Path(__file__).resolve().parent.parent / ".env"):
 
 load_dotenv()
 
-from . import bars, tools, weather  # noqa: E402 — needs env loaded first
+from . import accounts, bars, geo, tools, weather  # noqa: E402 — needs env loaded first
 from .agents import PlanError, orchestrate, rerank, sf_hour  # noqa: E402
 from .data import MODE_COLORS, PLACES  # noqa: E402
 from .live import FeedError  # noqa: E402
@@ -28,7 +28,33 @@ from .modes import MODES  # noqa: E402
 
 STATIC = Path(__file__).parent / "static"
 app = Flask(__name__, static_folder=str(STATIC))
+accounts.init_app(app)
 PLANS = OrderedDict()   # plan_id → (feasible trips, explanations, baseline, caps); small LRU
+
+
+@app.get("/api/geocode")
+def geocode():
+    """Address / place type-ahead inside San Francisco (Photon, cached)."""
+    q = (request.args.get("q") or "").strip()[:120]
+    try:
+        return jsonify({"results": geo.search(q)})
+    except FeedError:
+        return jsonify({"results": [], "error": "Address search is unavailable right now."}), 503
+
+
+@app.get("/api/reverse")
+def reverse():
+    try:
+        lat, lon = float(request.args["lat"]), float(request.args["lon"])
+    except (KeyError, ValueError):
+        return jsonify({"error": "lat and lon are required."}), 400
+    if not (geo.inside_sf(lat, lon) or geo.near_sfo(lat, lon)):
+        return jsonify({"error": "You're outside San Francisco. Hopper covers SF and SFO only."}), 422
+    try:
+        return jsonify(geo.reverse(lat, lon))
+    except FeedError:
+        return jsonify({"name": "Current location", "address": "", "lat": lat, "lon": lon,
+                        "key": geo.make_key(lat, lon)})
 
 
 @app.get("/")
@@ -38,8 +64,9 @@ def index():
 
 @app.get("/api/places")
 def places():
-    return jsonify({"places": [{"key": k, "name": v[0], "lat": v[1], "lon": v[2], "elev_ft": v[3]}
-                               for k, v in sorted(PLACES.items(), key=lambda kv: kv[1][0])],
+    return jsonify({"places": [{"key": k, "name": PLACES[k][0], "lat": PLACES[k][1], "lon": PLACES[k][2],
+                                "elev_ft": PLACES[k][3]}
+                               for k in sorted(geo.landmarks(), key=lambda k: PLACES[k][0])],
                     "colors": MODE_COLORS,
                     "modes": {k: {"label": m["label"], "goal": m["goal"]} for k, m in MODES.items()},
                     "vibes": bars.VIBES})
@@ -78,9 +105,16 @@ def crawl():
     body = request.get_json(force=True) or {}
     if body.get("age_confirmed") is not True:
         return jsonify({"error": "Bar Crawl is 21+. Please confirm your age."}), 403
-    start, end = body.get("start"), body.get("end") or None
-    if start not in PLACES or (end and end not in PLACES):
-        return jsonify({"error": "Pick a start (and optional end) from the list."}), 422
+    try:
+        start = geo.resolve(body.get("start_place") or body.get("start"))
+        end = geo.resolve(body.get("end_place") or body.get("end")) if (body.get("end_place") or body.get("end")) else None
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+    if not start:
+        return jsonify({"error": "Pick where the crawl starts."}), 422
+    for k in (start, end):
+        if k:
+            geo.ensure_ready(k)
     stops = max(2, min(int(body.get("stops") or 3), 5))
     vibe = body.get("vibe") if body.get("vibe") in bars.VIBES else "any"
     hour = int(body.get("hour", sf_hour())) % 24
