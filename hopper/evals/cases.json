@@ -13,7 +13,8 @@
    "max_total_walk_mi": 2.5,
    "ride_last_resort": true,
    "top_within_cheapest_usd": 0.5,
-   "max_slowdown_vs_fastest_transit": 2.5
+   "max_slowdown_vs_fastest_transit": 2.5,
+   "min_saving_per_hour_usd": 3.0
   },
   "burn": {
    "goal": "part transit / part workout",
@@ -410,8 +411,7 @@
      "SEA",
      "PAE"
     ]
-   },
-   "known_issue": "Fare estimates can't tell which airport pairs have service; Boeing Field (BFI) is closer but has no SFO flights. Real Duffel offers fix this."
+   }
   }
  ],
  "crawls": [

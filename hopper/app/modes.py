@@ -14,7 +14,8 @@ MODES = {
     "broke": {"label": "Broke", "goal": "budget",
               "weights": {"time": 0.5, "cost": 3.0, "health": 0.0},   # budget first: no paying extra for calories
               "max_walk_leg_mi": 1.5, "max_total_walk_mi": 2.5,
-              "max_slowdown": 2.5, "slowdown_vs": "transit", "ride_last_resort": True},
+              "max_slowdown": 2.5, "slowdown_vs": "transit", "ride_last_resort": True,
+              "min_saving_per_hour": 3.0},     # a slower trip must save ≥ $1 per 20 extra minutes
     "burn": {"label": "Burn", "goal": "part transit / part workout",
              "weights": {"time": 0.5, "cost": 0.5, "health": 3.0},
              "max_walk_leg_mi": 2.0, "max_total_walk_mi": 3.0,
@@ -32,6 +33,13 @@ ACTIVE = ("walk", "bike", "ebike")
 def active_share(trip):
     total = trip.total_min or 1
     return sum(l.minutes for l in trip.legs if l.mode in ACTIVE) / total
+
+
+def worth_the_wait(trip, others, per_hour):
+    """False when some faster trip costs barely more: +37 min to save $1.13 isn't a deal.
+    The fastest trip always passes, so this never empties the list."""
+    return all(u.cost - trip.cost >= per_hour * (trip.total_min - u.total_min) / 60 - 1e-9
+               for u in others if u.total_min < trip.total_min)
 
 
 def mode_filter(trips, mode, caps=None):
@@ -56,6 +64,8 @@ def mode_filter(trips, mode, caps=None):
             if m.get("slowdown_vs") == "transit" else trips
         fastest = min(t.total_min for t in (pool or trips))
         kept = [t for t in kept if t.total_min <= fastest * m["max_slowdown"]]
+    if kept and m.get("min_saving_per_hour"):
+        kept = [t for t in kept if worth_the_wait(t, kept, m["min_saving_per_hour"])]
     if kept and m.get("ride_last_resort"):
         no_ride = [t for t in kept if not any(l.mode == "ride" for l in t.legs)]
         kept = no_ride or kept

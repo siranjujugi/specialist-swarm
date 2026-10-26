@@ -6,9 +6,11 @@ planner can't hide by also being in the oracle.
 """
 import json
 import re
+from pathlib import Path
 
 from app.agents import grounded
 
+NONSTOP = json.loads((Path(__file__).resolve().parent.parent / "app" / "fixtures" / "routes.json").read_text())["routes"]
 TRANSIT = ("muni", "bart", "cable", "bus", "tram", "metro", "rail", "ferry")
 ACTIVE = ("walk", "bike", "ebike")
 EPS = 1e-6
@@ -143,6 +145,18 @@ def mode_correctness(mode, resp, feasible, spec):
         no_ride = [t for t in ok if "ride" not in modes_of(t)]
         if spec.get("ride_last_resort") and no_ride and "ride" in modes_of(top):
             fails.append(f"top pick uses a ride though {len(no_ride)} ride-free trips comply")
+        per_hour = spec.get("min_saving_per_hour_usd")
+        if per_hour:
+            for u in ok:
+                extra = top["total_min"] - u["total_min"]
+                if extra > 0 and u["cost"] - top["cost"] < per_hour * extra / 60 - EPS:
+                    fails.append(f"top pick is {extra:.0f} min slower than a compliant trip to save only "
+                                 f"${u['cost'] - top['cost']:.2f} (needs ${per_hour * extra / 60:.2f})")
+                    break
+            ok = [t for t in ok if not any(u["total_min"] < t["total_min"] and
+                                           u["cost"] - t["cost"] < per_hour * (t["total_min"] - u["total_min"]) / 60 - EPS
+                                           for u in ok)]
+            no_ride = [t for t in ok if "ride" not in modes_of(t)]
         pool = no_ride or ok
         best = min(t["cost"] for t in pool)
         if top["cost"] > best + spec["top_within_cheapest_usd"] + EPS:
@@ -171,6 +185,10 @@ def cross_mode(tops, notices, spec, feasible):
                 continue
             if mode == "broke" and "ride" in modes_of(theirs) and "ride" not in modes_of(mine):
                 continue                     # a ride-free pick wins Broke even if it costs a bit more
+            per_hour = spec[mode].get("min_saving_per_hour_usd")
+            if per_hour and theirs["total_min"] > mine["total_min"] and \
+                    mine["cost"] - theirs["cost"] < per_hour * (theirs["total_min"] - mine["total_min"]) / 60:
+                continue                     # cheaper, but too slow for what it saves
             if better(mine[field], theirs[field]) != mine[field] and abs(mine[field] - theirs[field]) > EPS:
                 fails.append(f"{mode.title()} pick ({mine[field]} {unit}) loses to {other.title()}'s "
                              f"({theirs[field]} {unit}), which also obeys {mode.title()}'s rules")
@@ -264,6 +282,9 @@ def flights(case, mode, out):
             fails.append(f"{tag}: total fare doesn't equal flight fare + ground costs")
         if o["total_low"] > o["total_high"]:
             fails.append(f"{tag}: low fare above high fare")
+        served = NONSTOP.get(o["dep"]["iata"], "").split()
+        if f.get("stops", 0) == 0 and o["arr"]["iata"] not in served:
+            fails.append(f"{tag}: estimated as nonstop, but no such route is scheduled")
         if o["dep"]["iata"] == o["arr"]["iata"]:
             fails.append(f"{tag}: departs and lands at the same airport")
         if not any(o["dep"]["iata"] in u and o["arr"]["iata"] in u for u in o["links"].values()):

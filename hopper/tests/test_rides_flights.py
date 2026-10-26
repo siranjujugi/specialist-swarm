@@ -95,3 +95,12 @@ def test_far_trips_redirect_to_flights():
     r = c.post("/api/plan", json={"origin": "ferry_building", "weather": "clear",
                                   "destination_place": {"name": "Times Square", "lat": 40.758, "lon": -73.9855}})
     assert r.status_code == 200 and r.json["redirect"] == "flights" and r.json["miles"] > 2000
+
+
+def test_only_airport_pairs_with_service_are_estimated():
+    from app import flights
+    assert flights.nonstop("SFO", "SEA") and not flights.nonstop("SFO", "BFI")   # Boeing Field: no SFO flights
+    sfo, sea = (next(a for a in flights.airports() if a["iata"] == c) for c in ("SFO", "SEA"))
+    one_stop, direct = flights.flight_estimate(sfo, sea, stops=1), flights.flight_estimate(sfo, sea)
+    assert one_stop["stops"] == 1 and one_stop["minutes"] - direct["minutes"] >= 85
+    assert one_stop["fare_low"] > direct["fare_low"]

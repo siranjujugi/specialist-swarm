@@ -95,3 +95,13 @@ def test_crawl_api_requires_age_confirmation():
 def test_ride_fare_helper_matches_ride_leg():
     leg = tools.ride_leg("union_square", "powell", hour=12)
     assert leg.cost == tools.ride_fare(leg.distance_mi, leg.minutes, 1.0)
+
+
+def test_broke_skips_slow_trips_that_barely_save():
+    cab = _trip("cab", [ride(15, cost=15.93)])
+    crawl = _trip("crawl", [muni(37), ride(15, cost=11.95)])    # +37 min to save $1.13
+    bus = _trip("bus", [walk(0.3, 6), muni(30)])                # +21 min to save $13.08
+    kept, _ = modes.mode_filter([cab, crawl], "broke")
+    assert [t.id for t in kept] == ["cab"]                      # the slow combo isn't worth it
+    kept, _ = modes.mode_filter([cab, crawl, bus], "broke")
+    assert [t.id for t in kept] == ["bus"]

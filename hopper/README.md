@@ -58,6 +58,10 @@ Trips over ~100 miles switch to flights instead of failing:
 
 - Airports: 3,244 scheduled-service airports from **OurAirports** (public domain, bundled in
   `app/fixtures/airports.json`); the 3 nearest each side, big hubs preferred.
+- Only airport pairs with scheduled service are estimated: nonstop pairs from **OpenFlights**
+  route data (ODbL 1.0, bundled as `app/fixtures/routes.json`, built by `scripts/build_routes.py`)
+  when any exist, otherwise one-stop trips (+90 min, +15% fare) between airports that have routes.
+  The route data dates from 2014, so it's a "does this pair have service" signal, not a timetable.
 - Each option = ground trip to the airport (planned by the normal swarm in your Mode: BART
   to SFO in Broke, a ride in Hustle) + check-in buffer (90 min domestic / 150 international)
   + flight + arrival buffer (25 / 50) + ground trip from the airport. Hustle/Burn rank by
@@ -138,7 +142,7 @@ Pick one at the top (or let the Intent agent infer it from your question):
 | Mode | Goal | Rules on top of the Critic |
 |---|---|---|
 | ⚡ **Hustle** | Fastest | Walk ≤ 0.4 mi per leg, ≤ 0.8 mi total; weights time 3 · cost 0.5 · health 0 |
-| 💸 **Broke** | Budget | Walk ≤ 1.5 mi per leg; ride-hail only if nothing else works; ≤ 2.5× the fastest *transit* trip; price first (calories don't count) |
+| 💸 **Broke** | Budget | Walk ≤ 1.5 mi per leg; ride-hail only if nothing else works; ≤ 2.5× the fastest *transit* trip; price first (calories don't count); a slower trip must save ≥ $1 per 20 extra min |
 | 🍸 **Bar Crawl** | Hit cool bars | 21+ gate; 2–5 stops; walk-only hops (≤ 0.5 mi, ≤ 0.25 mi in rain); simulated ride home |
 | 🔥 **Burn** | Part transit / part workout | Must include a transit leg AND ≥ 40% active minutes; ≤ 2× the fastest *transit* trip |
 
@@ -244,6 +248,20 @@ start the workflow by hand with **live** ticked; it needs the `ANTHROPIC_API_KEY
 - Walking: ACSM walking equation (net kcal, resting excluded), Tobler's hiking function for
   uphill/downhill speed, 0.762 m stride for steps.
 - Cycling: MET 6.8 classic (plus hill load), 4.0 e-bike.
+
+## Browser smoke tests
+
+`tests_ui/` drives the real page in Chromium against a live, offline server: plan a trip from a
+popular place, switch Modes (re-rank only, no new `/api/plan`), open the ride chooser, the Bar
+Crawl 21+ gate and a crawl, and a 375 px phone width with no sideways scroll. Every test also fails
+on any Content-Security-Policy violation or uncaught JavaScript error.
+
+```bash
+pip install -r requirements-ui.txt && python -m playwright install chromium
+HOPPER_OFFLINE=1 python -m pytest tests_ui        # --browser-channel chrome to use your installed Chrome
+```
+
+CI runs them as a separate `ui` job and uploads Playwright traces when one fails.
 
 ## Known limitations (prototype)
 

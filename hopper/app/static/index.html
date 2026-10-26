@@ -1344,7 +1344,7 @@ function renderFlights() {
         ${step(g1.ok ? (g1.legs?.find(l => l.mode !== "walk")?.mode || "walk") : "ride", `To ${esc(o.dep.iata)}: ${esc(g1.ok ? g1.summary : "plan your own way")}`, g1.ok ? `${g1.minutes} min, $${g1.cost.toFixed(2)}` : "about 1 hr")}
         ${step("clock", `Check-in and security`, `${f.buffer_before} min`)}
         ${off ? step("plane", `${esc(off.airline)} ${esc(off.flight_numbers[0])}${off.stops ? ` + ${off.stops} more` : ""}`, `${hm(off.duration_min || f.minutes)}, ${money(off.price, off.currency)}`)
-              : step("plane", `Flight, ${f.km.toLocaleString()} km`, `about ${hm(f.minutes)}, $${f.fare_low}–${f.fare_high}`)}
+              : step("plane", `Flight, ${f.km.toLocaleString()} km${f.stops ? `, ${f.stops} stop` : ", nonstop"}`, `about ${hm(f.minutes)}, $${f.fare_low}–${f.fare_high}`)}
         ${step("clock", f.international ? "Deplane, passport control" : "Deplane", `${f.buffer_after} min`)}
         ${step(g2.ok ? (g2.legs?.find(l => l.mode !== "walk")?.mode || "walk") : "ride", `From ${esc(o.arr.iata)}: ${esc(g2.ok ? g2.summary : "plan your own way")}`, g2.ok ? `${g2.minutes} min, $${g2.cost.toFixed(2)}` : "about 1 hr")}
       </ul>

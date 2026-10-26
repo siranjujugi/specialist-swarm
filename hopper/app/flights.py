@@ -18,7 +18,10 @@ from . import duffel, tools
 from .live import FeedError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "airports.json"
+ROUTES = Path(__file__).parent / "fixtures" / "routes.json"   # OpenFlights nonstop routes (ODbL)
 _AIRPORTS = None
+_ROUTES = None
+CONNECTION_MIN = 90            # added to a one-stop estimate: second takeoff/landing + layover
 CRUISE_KMH = 780
 MODE_LABELS = {"ride": "Ride", "walk": "Walk", "bike": "Bike", "ebike": "E-bike", "muni": "Muni", "bart": "BART",
                "cable": "Cable car", "bus": "Bus", "tram": "Tram", "metro": "Metro", "rail": "Train", "ferry": "Ferry"}
@@ -30,6 +33,17 @@ def airports():
         data = json.loads(FIXTURE.read_text())
         _AIRPORTS = [dict(zip(data["fields"], row)) for row in data["airports"]]
     return _AIRPORTS
+
+
+def routes():
+    global _ROUTES
+    if _ROUTES is None:
+        _ROUTES = {k: set(v.split()) for k, v in json.loads(ROUTES.read_text())["routes"].items()}
+    return _ROUTES
+
+
+def nonstop(a, b):
+    return b in routes().get(a, ())
 
 
 def km_between(a, b):
@@ -49,15 +63,18 @@ def nearest_airports(lat, lon, n=2, max_km=160):
     return [{**a, "km_away": round(d, 1)} for _, d, a in scored[:n]]
 
 
-def flight_estimate(dep, arr):
+def flight_estimate(dep, arr, stops=0):
     """Block time and an economy fare range from great-circle distance (labelled estimates)."""
     km = km_between((dep["lat"], dep["lon"]), (arr["lat"], arr["lon"]))
     block = 25 + 15 + km / CRUISE_KMH * 60                     # taxi + climb/descent + cruise
     intl = dep["country"] != arr["country"]
     base = (60 + 0.085 * km) if km < 1500 else (120 + 0.065 * km)
     base *= 1.2 if intl else 1.0
+    if stops:
+        block += CONNECTION_MIN * stops
+        base *= 1.15
     r5 = lambda x: int(5 * round(x / 5))                       # noqa: E731
-    return {"km": round(km), "minutes": r5(block), "international": intl,
+    return {"km": round(km), "minutes": r5(block), "international": intl, "stops": stops,
             "fare_low": r5(base * 0.75), "fare_high": r5(base * 1.6),
             "buffer_before": 150 if intl else 90, "buffer_after": 50 if intl else 25}
 
@@ -120,11 +137,19 @@ def plan(origin_key, dest_key, date, hour, weight_kg, plan_fn, tz_origin, tz_des
     pairs = [(a, b) for a in deps for b in arrs if a["iata"] != b["iata"]]
     if not pairs:
         return {"options": [], "error": "Both places use the same airport — this trip is better by ground."}
+    # Only estimate flights that exist: nonstop pairs when there are any, else one-stop trips
+    # between airports that have scheduled routes at all (Boeing Field has no SFO service).
+    direct = [(a, b, 0) for a, b in pairs if nonstop(a["iata"], b["iata"])]
+    pairs = direct or [(a, b, 1) for a, b in pairs if routes().get(a["iata"]) and routes().get(b["iata"])]
+    if not pairs:
+        return {"options": [], "error": "No scheduled flights from the airports near these places."}
 
     place = lambda a: {"name": f"{a['name']} ({a['iata']})", "lat": a["lat"], "lon": a["lon"]}  # noqa: E731
     o_place = {"name": tools.name(origin_key), "lat": o[0], "lon": o[1]}
     d_place = {"name": tools.name(dest_key), "lat": d[0], "lon": d[1]}
     with ThreadPoolExecutor(max_workers=6) as pool:
+        deps = [a for a in deps if any(p[0] is a for p in pairs)]
+        arrs = [b for b in arrs if any(p[1] is b for p in pairs)]
         to_air = {a["iata"]: pool.submit(_ground, plan_fn, o_place, place(a), hour, weight_kg, mode) for a in deps}
         # Destination-side ground trips are planned for the rough local arrival hour.
         from_air = {}
@@ -137,8 +162,8 @@ def plan(origin_key, dest_key, date, hour, weight_kg, plan_fn, tz_origin, tz_des
         from_air = {k: f.result() for k, f in from_air.items()}
 
     options = []
-    for a, b in pairs:
-        f = flight_estimate(a, b)
+    for a, b, stops in pairs:
+        f = flight_estimate(a, b, stops)
         g1, g2 = to_air[a["iata"]], from_air[b["iata"]]
         g1_min = g1["minutes"] if g1["ok"] else 60
         g2_min = g2["minutes"] if g2["ok"] else 60
