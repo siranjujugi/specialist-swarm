@@ -193,9 +193,20 @@ def choose_stops(bars, start, n, vibe, hop_mi, radius_mi=0.6):
     return best, alt
 
 
+def _routing_off():
+    # Same switch the trip planner honours: offline / no-OSRM runs never touch OSRM or spend ORS budget.
+    return os.environ.get("HOPPER_OFFLINE") == "1" or os.environ.get("HOPPER_NO_OSRM") == "1"
+
+
+def _route(mode, a_pt, b_pt):
+    if _routing_off():
+        raise FeedError("street routing off")
+    return osrm.route(mode, a_pt, b_pt)
+
+
 def _walk(a_pt, b_pt, a_name, b_name, kg):
     try:
-        r = osrm.route("walk", a_pt, b_pt)
+        r = _route("walk", a_pt, b_pt)
         dist, path, src = r["distance_mi"], r["path"], f"{r['engine']}.foot"
     except FeedError:
         dist, path, src = tools.haversine_pts(a_pt, b_pt) * tools.WALK_CIRCUITY, [a_pt, b_pt], "estimate"
@@ -209,7 +220,7 @@ def _walk(a_pt, b_pt, a_name, b_name, kg):
 
 def _ride(a_pt, b_pt, a_name, b_name, hour, event):
     try:
-        r = osrm.route("ride", a_pt, b_pt)
+        r = _route("ride", a_pt, b_pt)
         dist, path, src = r["distance_mi"], r["path"], f"{r['engine']}.car+traffic"
         minutes = r["duration_min"] * tools.traffic_factor(hour)
     except FeedError:
@@ -237,7 +248,7 @@ def build_itinerary(route, start_key, end_key, hour, minutes_per_stop, event, kg
     for b in route:
         w = _walk(prev_pt, _pt(b), prev_name, b["name"], kg)
         walks.append(w)
-        t += w["minutes"]
+        t += round(w["minutes"])     # whole minutes, so arrive → leave always reads as the stop length
         stops.append({"name": b["name"], "type": b["type"], "lat": b["lat"], "lon": b["lon"],
                       "arrive": clock(t), "leave": clock(t + minutes_per_stop),
                       "hours": b["tags"].get("opening_hours", "hours not listed — check before you go"),

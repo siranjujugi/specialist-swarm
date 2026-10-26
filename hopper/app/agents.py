@@ -653,9 +653,9 @@ def explainer_agent(picks, baseline, trace, client):
                             "id": {"type": "string"}, "why": {"type": "string"}},
                             "required": ["id", "why"]}}}, "required": ["items"]}}],
             tool_choice={"type": "tool", "name": "explanations"},
-            messages=[{"role": "user", "content": json.dumps({"options": payload})}])
+            messages=[{"role": "user", "content": json.dumps({"options": payload}, ensure_ascii=False)}])
         items = next(b.input for b in resp.content if b.type == "tool_use")["items"]
-        facts = {p["id"]: json.dumps(p) for p in payload}
+        facts = {p["id"]: json.dumps(p, ensure_ascii=False) for p in payload}   # "渋８８" stays checkable
         out, dropped = dict(fallback), 0
         for i in items:
             if i.get("id") in fallback:

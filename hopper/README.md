@@ -138,7 +138,7 @@ Pick one at the top (or let the Intent agent infer it from your question):
 | Mode | Goal | Rules on top of the Critic |
 |---|---|---|
 | ⚡ **Hustle** | Fastest | Walk ≤ 0.4 mi per leg, ≤ 0.8 mi total; weights time 3 · cost 0.5 · health 0 |
-| 💸 **Broke** | Budget | Walk ≤ 1.5 mi per leg; ride-hail only if nothing else works; ≤ 2.5× the fastest trip |
+| 💸 **Broke** | Budget | Walk ≤ 1.5 mi per leg; ride-hail only if nothing else works; ≤ 2.5× the fastest *transit* trip; price first (calories don't count) |
 | 🍸 **Bar Crawl** | Hit cool bars | 21+ gate; 2–5 stops; walk-only hops (≤ 0.5 mi, ≤ 0.25 mi in rain); simulated ride home |
 | 🔥 **Burn** | Part transit / part workout | Must include a transit leg AND ≥ 40% active minutes; ≤ 2× the fastest *transit* trip |
 
@@ -214,6 +214,7 @@ against a written spec in `evals/cases.json`, never by calling the planner's own
 python -m evals.run                    # offline, deterministic, free (CI runs this on every push)
 python -m evals.run --live             # also grades Claude's Intent + Explainer (needs ANTHROPIC_API_KEY)
 python -m evals.run --update-golden    # re-record golden.json after an intended routing change
+python -m evals.run --record           # re-fetch the world-feed cassette (network), then re-record golden
 ```
 
 | Suite | What it checks |
@@ -224,10 +225,17 @@ python -m evals.run --update-golden    # re-record golden.json after an intended
 | mode | the top pick obeys its Mode's rules and serves its goal (Hustle within 15% of the fastest compliant trip, Broke within $0.50 of the cheapest and ride-free when possible, Burn within 20% of the most active) |
 | cross-mode | for the same request, each Mode's pick beats the other Modes' picks on its own goal whenever those picks also follow its rules |
 | expectations | hand-written truths: no bike share in rain, budget caps, no steep walks, Broke to SFO takes BART |
+| world | Paris, London, Tokyo, NYC trips run on the world stack (Transitous, CityBikes): local time zone, km vs. mi, the city's transit used, no bikes in rain |
+| flights | door-to-door minutes and fares add up from their parts, airports sit at the right ends, Broke sorts by price and Hustle by time, Broke reaches SFO without a ride, booking links pre-filled |
+| bar crawl | 21+ gate, right number of distinct bars, hops within the walk limit (shorter in rain), a timeline that adds up, honest totals, vibe respected when enough bars match, ride home only with an end point |
+| hand-off | Bar Crawl mode goes to the crawl planner; a 2,500-mile trip goes to flights |
 | golden | top-pick route, time, cost and kcal match `golden.json` (±10% time, ±$0.50, ±15% kcal) |
 | intent | rider messages are parsed into the right fields — by the rules parser (offline) and by Claude (`--live`) |
 
-12 golden trips × 3 Modes plus 14 intent prompts. In CI the report goes to the run's summary
+12 SF trips and 4 world trips × 3 Modes, 5 flight searches, 5 crawls and 14 intent prompts. World trips and
+flights replay `evals/fixtures/world_cassette.json` (real Transitous / CityBikes / Open-Meteo answers,
+trimmed, with a frozen clock), so they stay offline and reproducible; a request missing from the cassette
+fails like an outage. A case can carry `known_issue` — it's reported under "Known issues" but doesn't fail CI. In CI the report goes to the run's summary
 page and `eval-results.json` is uploaded as a build artifact. The live run happens only when you
 start the workflow by hand with **live** ticked; it needs the `ANTHROPIC_API_KEY` repo secret.
 

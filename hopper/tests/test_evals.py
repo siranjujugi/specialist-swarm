@@ -92,3 +92,36 @@ def test_claude_still_wins_without_an_alias():
     assert parsed["destination"] == "ferry_building"
     # Addresses never trigger an alias, even when a word looks like one ("Dolores St").
     assert agents.alias_place("500 Dolores St") is None and agents.alias_place("fidi") == "montgomery"
+
+
+def test_broke_slowdown_is_measured_against_transit():
+    from tests.test_modes import _trip, muni, ride, walk
+    from app.tools import Leg
+    ebike = _trip("ebike", [Leg("ebike", "a", "c", 3.0, 14, cost=11.59, source="t")])
+    bus = _trip("bus", [walk(0.3, 6), muni(30)])            # 36 min: 2.6× the e-bike, 1× fastest transit
+    kept, notice = modes.mode_filter([ebike, bus], "broke")
+    assert "bus" in [t.id for t in kept] and notice == ""
+
+
+def test_replay_misses_fail_like_an_outage():
+    import pytest
+    from app import world
+    from app.live import FeedError
+    from evals import replay
+    with replay.cassette([]):
+        with pytest.raises(FeedError, match="not in eval cassette"):
+            world.get_json("https://api.transitous.org/api/v1/plan", {"fromPlace": "0,0"})
+
+
+def test_flight_and_crawl_checks_catch_bad_arithmetic():
+    g = {"ok": True, "minutes": 30, "cost": 2.4, "legs": [], "summary": "BART"}
+    f = {"buffer_before": 90, "minutes": 60, "buffer_after": 30, "fare_low": 100, "fare_high": 200}
+    o = {"dep": {"iata": "SFO"}, "arr": {"iata": "LAX"}, "flight": f, "ground_to": g, "ground_from": g,
+         "total_min": 240, "total_low": 105, "total_high": 205, "links": {"g": "SFO-LAX"}}
+    assert checks.flights({}, "hustle", {"options": [o]}) == []
+    assert "≠ parts" in checks.flights({}, "hustle", {"options": [dict(o, total_min=200)]})[0]
+    stop = {"name": "Bar", "osm_id": 1, "arrive": "8:10 pm", "leave": "8:56 pm", "why": "x"}
+    walk = {"distance_mi": 0.2, "minutes": 10, "frm_name": "a", "to_name": "Bar"}
+    out = {"hop_limit_mi": 0.5, "itinerary": {"stops": [stop], "walks": [walk], "ride_home": None,
+                                              "totals": {"minutes": 55, "walk_mi": 0.2}}}
+    assert "stays 46 min" in checks.crawl({"stops": 1}, out, 0)[0]

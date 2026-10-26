@@ -80,7 +80,7 @@ def explanation(resp):
         # Same facts the Explainer is given — including whole-minute totals — minus the sentence itself.
         facts = json.dumps({"option": {k: v for k, v in o.items() if k != "why"}, "baseline": base, "deltas": d,
                             "minutes": round(o["total_min"]), "baseline_minutes": round(base["total_min"]),
-                            "abs": {k: abs(v) for k, v in d.items()}})
+                            "abs": {k: abs(v) for k, v in d.items()}}, ensure_ascii=False)
         if not grounded(why, facts):
             fails.append(f"{o['label']}: ungrounded number in “{why}”")
         for pattern, key, ok in CLAIMS:
@@ -115,11 +115,10 @@ def complies(trip, spec, feasible):
     if spec.get("needs_transit"):
         if not any(m in TRANSIT for m in modes_of(trip)) or active_share(trip) < spec["min_active_share"] - EPS:
             return False
-        transit = [t for t in feasible if any(m in TRANSIT for m in modes_of(t))]
-        if transit and trip["total_min"] > min(t["total_min"] for t in transit) * spec["max_slowdown_vs_fastest_transit"] + EPS:
-            return False
-    if spec.get("max_slowdown"):
-        if trip["total_min"] > min(t["total_min"] for t in feasible) * spec["max_slowdown"] + EPS:
+    if spec.get("max_slowdown_vs_fastest_transit"):
+        # "Slow is fine, but not absurd": bounded by the fastest transit trip (or any trip if no transit).
+        pool = [t for t in feasible if any(m in TRANSIT for m in modes_of(t))] or feasible
+        if trip["total_min"] > min(t["total_min"] for t in pool) * spec["max_slowdown_vs_fastest_transit"] + EPS:
             return False
     return True
 
@@ -222,4 +221,114 @@ def intent(case, parsed):
     for k in case.get("absent", []):
         if parsed.get(k) is not None:
             fails.append(f"{k}: expected none, got {parsed[k]!r}")
+    return fails
+
+
+# ── World trips ──────────────────────────────────────────────────────────────
+
+def world_expectations(case, by_mode):
+    fails, exp = [], case.get("expect") or {}
+    for mode, r in by_mode.items():
+        if r["request"]["region"] != "world":
+            fails.append(f"{mode}: planned as region {r['request']['region']!r}, not world")
+        if exp.get("tz") and r["request"]["tz"] != exp["tz"]:
+            fails.append(f"{mode}: local time zone {r['request']['tz']}, expected {exp['tz']}")
+        if exp.get("units") and r["units"] != exp["units"]:
+            fails.append(f"{mode}: shows {r['units']}, expected {exp['units']}")
+    every = [o for r in by_mode.values() for o in r["options"]]
+    if exp.get("uses_transit") and not any(set(modes_of(o)) & set(TRANSIT) for o in every):
+        fails.append("no option uses the city's transit")
+    if exp.get("no_bikes"):
+        fails += [f"{o['label']} uses bike share in rain" for o in every if {"bike", "ebike"} & set(modes_of(o))]
+    return fails
+
+
+# ── Flights (door to door) ───────────────────────────────────────────────────
+
+def flights(case, mode, out):
+    """Door-to-door totals add up, airports are near the right ends, and the Mode sets the order."""
+    fails, exp, opts = [], case.get("expect") or {}, out.get("options") or []
+    if not opts:
+        return [f"no flight options ({out.get('error')})"]
+    for o in opts:
+        tag = f"{o['dep']['iata']}→{o['arr']['iata']}"
+        f, g1, g2 = o["flight"], o["ground_to"], o["ground_from"]
+        if not (g1["ok"] and g2["ok"]):
+            fails.append(f"{tag}: ground leg failed ({g1.get('error') or g2.get('error')})")
+        legs = (g1["minutes"] if g1["ok"] else 60) + f["buffer_before"] + f["minutes"] + f["buffer_after"] \
+            + (g2["minutes"] if g2["ok"] else 60)
+        if o["total_min"] != round(legs):
+            fails.append(f"{tag}: door-to-door {o['total_min']} min ≠ parts {round(legs)} min")
+        ground = (g1.get("cost") or 0) + (g2.get("cost") or 0)
+        if o["total_low"] != round(f["fare_low"] + ground) or o["total_high"] != round(f["fare_high"] + ground):
+            fails.append(f"{tag}: total fare doesn't equal flight fare + ground costs")
+        if o["total_low"] > o["total_high"]:
+            fails.append(f"{tag}: low fare above high fare")
+        if o["dep"]["iata"] == o["arr"]["iata"]:
+            fails.append(f"{tag}: departs and lands at the same airport")
+        if not any(o["dep"]["iata"] in u and o["arr"]["iata"] in u for u in o["links"].values()):
+            fails.append(f"{tag}: no booking link pre-filled with both airports")
+    top = opts[0]
+    if exp.get("dep_airports") and top["dep"]["iata"] not in exp["dep_airports"]:
+        fails.append(f"top pick departs from {top['dep']['iata']}, expected one of {exp['dep_airports']}")
+    if exp.get("arr_airports") and top["arr"]["iata"] not in exp["arr_airports"]:
+        fails.append(f"top pick lands at {top['arr']['iata']}, expected one of {exp['arr_airports']}")
+    key = (lambda o: (o["total_low"], o["total_min"])) if mode == "broke" else (lambda o: (o["total_min"], o["total_low"]))
+    if [key(o) for o in opts] != sorted(key(o) for o in opts):
+        fails.append(f"{mode}: options not ordered by {'price' if mode == 'broke' else 'door-to-door time'}")
+    if mode == "broke" and exp.get("broke_ground_no_ride"):     # SF side: BART / Caltrain / Muni exist
+        if any(l["mode"] == "ride" for l in top["ground_to"].get("legs", [])):
+            fails.append(f"broke: gets to the airport by ride (“{top['ground_to'].get('summary')}”)")
+    return fails
+
+
+# ── Bar Crawl ────────────────────────────────────────────────────────────────
+
+def _clock_min(s):
+    h, rest = s.split(":")
+    m, ampm = rest.split()
+    return (int(h) % 12 + (12 if ampm == "pm" else 0)) * 60 + int(m)
+
+
+def crawl(case, out, vibe_matches_nearby):
+    """Right number of distinct bars, short hops, a timeline that adds up, honest totals."""
+    fails, it = [], out["itinerary"]
+    stops, walks, n = it["stops"], it["walks"], case["stops"]
+    per_stop = case.get("minutes_per_stop", 45)
+    if len(stops) != n:
+        fails.append(f"{len(stops)} stops, asked for {n}")
+    if len({s["osm_id"] for s in stops}) != len(stops):
+        fails.append("the same bar appears twice")
+    for w in walks[1:]:
+        if w["distance_mi"] > out["hop_limit_mi"] + 0.05:
+            fails.append(f"hop {w['frm_name']} → {w['to_name']} is {w['distance_mi']} mi (limit {out['hop_limit_mi']})")
+    if case.get("weather") == "rain" and out["hop_limit_mi"] >= 0.4:
+        fails.append(f"rain should shorten hops; limit is {out['hop_limit_mi']} mi")
+    for s, w in zip(stops, walks):
+        stay = (_clock_min(s["leave"]) - _clock_min(s["arrive"])) % 1440
+        if stay != per_stop:
+            fails.append(f"{s['name']}: stays {stay} min, expected {per_stop}")
+    for prev, s, w in zip(stops, stops[1:], walks[1:]):
+        gap = (_clock_min(s["arrive"]) - _clock_min(prev["leave"])) % 1440
+        if abs(gap - w["minutes"]) > 1:
+            fails.append(f"arrive {s['name']} {gap} min after leaving {prev['name']}, walk takes {w['minutes']}")
+    t = it["totals"]
+    if abs(t["minutes"] - (sum(w["minutes"] for w in walks) + n * per_stop)) > 0.5 * len(walks) + 0.5:
+        fails.append(f"total {t['minutes']} min ≠ walks + {n} × {per_stop} min")
+    if abs(t["walk_mi"] - sum(w["distance_mi"] for w in walks)) > 0.011:
+        fails.append("total walk ≠ sum of walks")
+    if case.get("end"):
+        r = it["ride_home"]
+        if not r or r["cost"] <= 0:
+            fails.append("no ride home priced although an end point was set")
+        elif "never drive" not in r["note"]:
+            fails.append("ride home lacks the don't-drink-and-drive note")
+    elif it["ride_home"]:
+        fails.append("ride home added without an end point")
+    if vibe_matches_nearby >= n:
+        off = [s["name"] for s in stops if not s.get("_vibe_ok", True)]
+        if off:
+            fails.append(f"{', '.join(off)} don't match “{case['vibe']}” though {vibe_matches_nearby} nearby bars do")
+    if any(not s["why"] for s in stops):
+        fails.append("a stop has no reason it's cool")
     return fails

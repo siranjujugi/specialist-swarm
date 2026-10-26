@@ -12,13 +12,13 @@ MODES = {
                "weights": {"time": 3.0, "cost": 0.5, "health": 0.0},
                "max_walk_leg_mi": 0.4, "max_total_walk_mi": 0.8},
     "broke": {"label": "Broke", "goal": "budget",
-              "weights": {"time": 0.5, "cost": 3.0, "health": 0.5},
+              "weights": {"time": 0.5, "cost": 3.0, "health": 0.0},   # budget first: no paying extra for calories
               "max_walk_leg_mi": 1.5, "max_total_walk_mi": 2.5,
-              "max_slowdown": 2.5, "ride_last_resort": True},
+              "max_slowdown": 2.5, "slowdown_vs": "transit", "ride_last_resort": True},
     "burn": {"label": "Burn", "goal": "part transit / part workout",
              "weights": {"time": 0.5, "cost": 0.5, "health": 3.0},
              "max_walk_leg_mi": 2.0, "max_total_walk_mi": 3.0,
-             "max_slowdown": 2.0, "needs_transit": True, "min_active_share": 0.4},
+             "max_slowdown": 2.0, "slowdown_vs": "transit", "needs_transit": True, "min_active_share": 0.4},
     "barcrawl": {"label": "Bar Crawl", "goal": "hit cool bars"},
 }
 
@@ -50,17 +50,17 @@ def mode_filter(trips, mode, caps=None):
         kept = [t for t in kept if any(l.mode in TRANSIT for l in t.legs)
                 and active_share(t) >= m["min_active_share"]]
     if kept and m.get("max_slowdown"):
-        # Burn is a transit hybrid, so it's measured against the fastest transit option,
-        # not against an e-bike or a car.
+        # Broke and Burn are measured against the fastest transit option, not an e-bike or a
+        # car: "2.5× a 14-min e-bike" would rule out every $2.85 bus and leave Broke an $11 e-bike.
         pool = [t for t in trips if any(l.mode in TRANSIT for l in t.legs)] \
-            if m.get("needs_transit") else trips
+            if m.get("slowdown_vs") == "transit" else trips
         fastest = min(t.total_min for t in (pool or trips))
         kept = [t for t in kept if t.total_min <= fastest * m["max_slowdown"]]
     if kept and m.get("ride_last_resort"):
         no_ride = [t for t in kept if not any(l.mode == "ride" for l in t.legs)]
         kept = no_ride or kept
     if not kept:
-        rules = {"hustle": f"walks ≤ {leg_cap} mi", "broke": "within 2.5× the fastest time",
+        rules = {"hustle": f"walks ≤ {leg_cap} mi", "broke": "within 2.5× the fastest transit trip",
                  "burn": "a transit leg + ≥ 40% active time, within 2× the fastest transit trip"}[mode]
         return trips, f"No trip met {m['label']}'s rules ({rules}) — showing the closest options."
     return kept, ""
